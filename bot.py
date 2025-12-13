@@ -80,10 +80,10 @@ def create_buttons(user_id: int):
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅", callback_data=f"y_{user_id}"),
-                InlineKeyboardButton("❌", callback_data=f"n_{user_id}"),
+                InlineKeyboardButton("✅ Aceptar", callback_data=f"y_{user_id}"),
+                InlineKeyboardButton("❌ Rechazar", callback_data=f"n_{user_id}"),
             ],
-            [InlineKeyboardButton("🛑", callback_data=f"b_{user_id}")],
+            [InlineKeyboardButton("🛑 Banear", callback_data=f"b_{user_id}")],
         ]
     )
     return buttons
@@ -129,8 +129,8 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(
             chat_id=user_id,
-            text="Your join request expired because we could not make sure you're not a bot. You are welcome to "
-            "send another join request if you still want to join.",
+            text="Tu solicitud de ingreso expiró porque no pudimos asegurarnos de que eres humano/a. "
+            "Puedes solicitar unirte nuevamente si todavía lo deseas.",
         )
     except Forbidden:
         # if somebody blocks me :(
@@ -164,7 +164,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.job_queue.get_jobs_by_name(str(update.effective_user.id)):
         await context.bot.send_message(
             chat_id=update.effective_user.id,
-            text="You do not need to hit the button again, just write your message and I will forward it to the admins",
+            text="No necesitas solicitar unirte nuevamente. Escribe tu mensaje y se lo enviaré a los/as admins.",
         )
         # the return is important so we don't do the things below again
         return
