@@ -324,6 +324,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             try:
                 await context.bot.ban_chat_member(chat_id=GROUP_ID, user_id=user_id)
+                await context.bot.decline_chat_join_request(chat_id=GROUP_ID, user_id=user_id)
             except BadRequest as e:
                 if e.message == "Participant_id_invalid":
                     # telegram was quicker and they banned the account
