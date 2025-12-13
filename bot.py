@@ -176,16 +176,20 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
             mention = f"@{user.username}"
         else:
             mention = f'<a href="tg://user?id={user.id}">{user.full_name}</a>'
+
         message = f"The user {mention} has sent a join request \\o/"
         context.bot_data["user_mentions"][user.id] = mention
+
     send_message = await context.bot.send_message(
         chat_id=APPROVE_GROUP_ID, text=message, message_thread_id=TOPIC_ID, reply_markup=create_buttons(user.id)
     )
+
     if user.id in context.bot_data["messages_to_edit"]:
         context.bot_data["messages_to_edit"][user.id].append(send_message.message_id)
     else:
         context.bot_data["messages_to_edit"][user.id] = [send_message.message_id]
         context.bot_data["last_message_to_user"][user.id] = send_message.message_id
+
     context.job_queue.run_once(
         reject_job, datetime.timedelta(days=1), user_id=user.id, name=str(user.id)
     )
@@ -351,6 +355,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except IndexError:
         # this can happen after a restart. No need to worry about this.
         pass
+
     await finish_user(
         context,
         text,
