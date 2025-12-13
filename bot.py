@@ -190,6 +190,116 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in context.bot_data["user_mentions"]:
+        # we don't know this user, just send a crappy message
+        await update.effective_message.reply_text("Hola :-)")
+        return
+
+    user_id = update.effective_user.id
+    user_mention = context.bot_data["user_mentions"][user_id]
+    if update.effective_message.effective_attachment:
+        # Polls need to be forwarded
+        if isinstance(update.effective_message.effective_attachment, Poll):
+            await update.effective_message.forward(APPROVE_GROUP_ID)
+            message = await context.bot.send_message(
+                chat_id=APPROVE_GROUP_ID,
+                text=f"The above Poll was sent by {user_mention}",
+                reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
+                reply_markup=create_buttons(user_id),
+            )
+            context.bot_data["messages_to_edit"][user_id].append(message.message_id)
+            return
+
+        previous_caption = (
+            update.effective_message.caption + "\n\n"
+            if update.effective_message.caption
+            else ""
+        )
+
+        message = await update.effective_message.copy(
+            chat_id=APPROVE_GROUP_ID,
+            caption=f"{previous_caption}This message was sent by {user_mention}",
+            reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
+            message_thread_id=TOPIC_ID,
+            reply_markup=create_buttons(user_id),
+        )
+
+        context.bot_data["messages_to_edit"][user_id].append(message.message_id)
+        # all of these cant get a caption, so we have to send a message instead
+        if isinstance(
+            update.effective_message.effective_attachment,
+            (Audio, VideoNote, Venue, Sticker, Location, Dice, Contact),
+        ):
+            message = await context.bot.send_message(
+                chat_id=APPROVE_GROUP_ID,
+                text=f"The above message was sent by {user_mention}",
+                reply_to_message_id=message.message_id,
+                reply_markup=create_buttons(user_id),
+            )
+            context.bot_data["messages_to_edit"][user_id].append(message.message_id)
+    else:
+        message = await context.bot.send_message(
+            chat_id=APPROVE_GROUP_ID,
+            text=f"{update.effective_message.text_html_urled}\n\nThis message was sent by {user_mention}",
+            reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
+            message_thread_id=TOPIC_ID,
+            reply_markup=create_buttons(user_id),
+        )
+        context.bot_data["messages_to_edit"][user_id].append(message.message_id)
+
+    # kick the deadline 24h down the road
+    update_job(context.job_queue, user_id)
+
+
+async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_message.reply_to_message.reply_markup:
+        if update.effective_message.reply_to_message.from_user.id == context.bot.id:
+            await update.effective_message.reply_text(
+                "Sorry, you either replied to the wrong message, "
+                "or this user has been dealt with already."
+            )
+        return
+
+    if update.effective_message.text.startswith("!"):
+        return
+
+    # we get the user id from the old reply markup
+    user_id = int(
+        update.effective_message.reply_to_message.reply_markup.inline_keyboard[0][0].callback_data.split("_")[1]
+    )
+
+    if user_id not in context.bot_data["user_mentions"]:
+        await update.effective_message.reply_text(
+            "Sorry, this user has been dealt with already."
+        )
+        return
+
+    context.bot_data["last_message_to_user"][user_id] = update.effective_message.message_id
+
+    try:
+        await context.bot.copy_message(
+            chat_id=user_id,
+            from_chat_id=update.effective_chat.id,
+            message_id=update.effective_message.message_id,
+            message_thread_id=TOPIC_ID,
+        )
+    except Forbidden:
+        message = await update.effective_message.reply_text(
+            f"The user {context.bot_data['user_mentions'][user_id]} blocked me, "
+            f"I can't send them messages anymore. I can still ban them however 😈",
+            reply_markup=create_buttons(user_id),
+        )
+        context.bot_data["messages_to_edit"][user_id].append(message.message_id)
+        return
+    send_message = await update.effective_message.reply_text(
+        f"Message sent to {context.bot_data['user_mentions'][user_id]}",
+        reply_markup=create_buttons(user_id),
+    )
+    context.bot_data["messages_to_edit"][user_id].append(send_message.message_id)
+    update_job(context.job_queue, user_id)
+
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     data = update.callback_query.data.split("_")
@@ -288,105 +398,6 @@ async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
                 chat_id=APPROVE_GROUP_ID, message_id=message_id, reply_markup=None
             )
         await asyncio.sleep(1)
-
-
-async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.effective_message.reply_to_message.reply_markup:
-        if update.effective_message.reply_to_message.from_user.id == context.bot.id:
-            await update.effective_message.reply_text(
-                "Sorry, you either replied to the wrong message, "
-                "or this user has been dealt with already."
-            )
-        return
-    if update.effective_message.text.startswith("!"):
-        return
-    # we get the user id from the old reply markup
-    user_id = int(
-        update.effective_message.reply_to_message.reply_markup.inline_keyboard[0][
-            0
-        ].callback_data.split("_")[1]
-    )
-    if user_id not in context.bot_data["user_mentions"]:
-        await update.effective_message.reply_text(
-            "Sorry, this user has been dealt with already."
-        )
-        return
-    context.bot_data["last_message_to_user"][
-        user_id
-    ] = update.effective_message.message_id
-    try:
-        await context.bot.copy_message(
-            chat_id=user_id,
-            from_chat_id=update.effective_chat.id,
-            message_id=update.effective_message.message_id,
-        )
-    except Forbidden:
-        message = await update.effective_message.reply_text(
-            f"The user {context.bot_data['user_mentions'][user_id]} blocked me, "
-            f"I can't send them messages anymore. I can still ban them however 😈",
-            reply_markup=create_buttons(user_id),
-        )
-        context.bot_data["messages_to_edit"][user_id].append(message.message_id)
-        return
-    send_message = await update.effective_message.reply_text(
-        f"Message sent to {context.bot_data['user_mentions'][user_id]}",
-        reply_markup=create_buttons(user_id),
-    )
-    context.bot_data["messages_to_edit"][user_id].append(send_message.message_id)
-    update_job(context.job_queue, user_id)
-
-
-async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in context.bot_data["user_mentions"]:
-        await update.effective_message.reply_text("Hi. Use /start to check me out.")
-        return
-    user_id = update.effective_user.id
-    user_mention = context.bot_data["user_mentions"][user_id]
-    if update.effective_message.effective_attachment:
-        # Polls need to be forwarded
-        if isinstance(update.effective_message.effective_attachment, Poll):
-            await update.effective_message.forward(JOINREQUESTCHAT)
-            message = await context.bot.send_message(
-                chat_id=JOINREQUESTCHAT,
-                text=f"The above Poll was sent by {user_mention}",
-                reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-                reply_markup=create_buttons(user_id),
-            )
-            context.bot_data["messages_to_edit"][user_id].append(message.message_id)
-            return
-        previous_caption = (
-            update.effective_message.caption + "\n\n"
-            if update.effective_message.caption
-            else ""
-        )
-        message = await update.effective_message.copy(
-            chat_id=JOINREQUESTCHAT,
-            caption=f"{previous_caption}This message was sent by {user_mention}",
-            reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-            reply_markup=create_buttons(user_id),
-        )
-        context.bot_data["messages_to_edit"][user_id].append(message.message_id)
-        # all of these cant get a caption, so we have to send a message instead
-        if isinstance(
-            update.effective_message.effective_attachment,
-            (Audio, VideoNote, Venue, Sticker, Location, Dice, Contact),
-        ):
-            message = await context.bot.send_message(
-                chat_id=JOINREQUESTCHAT,
-                text=f"The above message was sent by {user_mention}",
-                reply_to_message_id=message.message_id,
-                reply_markup=create_buttons(user_id),
-            )
-            context.bot_data["messages_to_edit"][user_id].append(message.message_id)
-    else:
-        message = await context.bot.send_message(
-            chat_id=JOINREQUESTCHAT,
-            text=f"{update.effective_message.text_html_urled}\n\nThis message was sent by {user_mention}",
-            reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-            reply_markup=create_buttons(user_id),
-        )
-        context.bot_data["messages_to_edit"][user_id].append(message.message_id)
-    update_job(context.job_queue, user_id)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
