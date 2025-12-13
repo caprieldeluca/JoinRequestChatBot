@@ -104,31 +104,6 @@ def create_buttons(user_id: int):
     return buttons
 
 
-async def finish_user(
-    context: ContextTypes.DEFAULT_TYPE,
-    text: str,
-    chat_id: int,
-    user_id: int,
-    message_id: int = None,
-    update: Update = None,
-):
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=text,
-        reply_to_message_id=message_id,
-    )
-    context.application.create_task(
-        edit_buttons(context.bot, context.bot_data["messages_to_edit"][user_id]), update
-    )
-    try:
-        del context.bot_data["messages_to_edit"][user_id]
-        del context.bot_data["last_message_to_user"][user_id]
-        del context.bot_data["user_mentions"][user_id]
-    except KeyError:
-        # this can happen in a race condition.
-        pass
-
-
 def update_job(job_queue: JobQueue, job_name: int):
     try:
         job = job_queue.get_jobs_by_name(str(job_name))[0]
@@ -272,6 +247,31 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update.callback_query.message.message_id,
         update,
     )
+
+
+async def finish_user(
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    chat_id: int,
+    user_id: int,
+    message_id: int = None,
+    update: Update = None,
+):
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_to_message_id=message_id,
+    )
+    context.application.create_task(
+        edit_buttons(context.bot, context.bot_data["messages_to_edit"][user_id]), update
+    )
+    try:
+        del context.bot_data["messages_to_edit"][user_id]
+        del context.bot_data["last_message_to_user"][user_id]
+        del context.bot_data["user_mentions"][user_id]
+    except KeyError:
+        # this can happen in a race condition.
+        pass
 
 
 async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
