@@ -43,9 +43,15 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-JOINREQUESTCHAT = -1001207129834
-MAINCHAT = -1001281813878
-DEVCHAT = 208589966
+# APPROVE_GROUP_ID = -1001391599953 # chat de OSM Root
+# GROUP_ID = -1001034791091 # OSM # -1003041316586 # chat de Test (el supergroup, el original era: -4660544582)
+# TOPIC_ID = 17836  # but this is the message_thread_id of the topic
+# DEV_CHAT_ID = 1022183970 # chat de debug
+
+GROUP_ID = -1003290766088 # OSM # -1003041316586 # chat de Test (el supergroup, el original era: -4660544582)
+APPROVE_GROUP_ID = -1003290766088 # chat de OSM Root
+TOPIC_ID = 2  # but this is the message_thread_id of the topic
+DEV_CHAT_ID = -1003290766088  # chat de debug
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -141,19 +147,21 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
             pass
         else:
             raise
+
     try:
-        await context.bot.decline_chat_join_request(chat_id=MAINCHAT, user_id=user_id)
+        await context.bot.decline_chat_join_request(chat_id=GROUP_ID, user_id=user_id)
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
             # seems that someone already took care of that join request
             pass
         else:
             raise
+
     await finish_user(
         context,
         # this gave me a key error a couple times for a user which got rejected. Not sure why. cant reproduce
         "Join request of " + context.bot_data["user_mentions"][user_id] + " expired.",
-        JOINREQUESTCHAT,
+        APPROVE_GROUP_ID,
         user_id,
         context.bot_data["last_message_to_user"][user_id],
     )
@@ -187,7 +195,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = f"The user {mention} has sent a join request \\o/"
         context.bot_data["user_mentions"][user.id] = mention
     send_message = await context.bot.send_message(
-        chat_id=JOINREQUESTCHAT, text=message, reply_markup=create_buttons(user.id)
+        chat_id=APPROVE_GROUP_ID, text=message, message_thread_id=TOPIC_ID, reply_markup=create_buttons(user.id)
     )
     if user.id in context.bot_data["messages_to_edit"]:
         context.bot_data["messages_to_edit"][user.id].append(send_message.message_id)
@@ -206,30 +214,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if data[0] == "y":
             try:
-                await context.bot.approve_chat_join_request(
-                    chat_id=MAINCHAT, user_id=user_id
-                )
+                await context.bot.approve_chat_join_request(chat_id=GROUP_ID, user_id=user_id)
             except Forbidden:
                 # telegram disabled the account
                 pass
+
             text = f"{update.effective_user.mention_html()} accepted the join request."
         elif data[0] == "n":
             try:
-                await context.bot.decline_chat_join_request(
-                    chat_id=MAINCHAT, user_id=user_id
-                )
+                await context.bot.decline_chat_join_request(chat_id=GROUP_ID, user_id=user_id)
             except Forbidden:
                 pass
+
             text = f"{update.effective_user.mention_html()} rejected the join request."
         else:
             try:
-                await context.bot.ban_chat_member(chat_id=MAINCHAT, user_id=user_id)
+                await context.bot.ban_chat_member(chat_id=GROUP_ID, user_id=user_id)
             except BadRequest as e:
                 if e.message == "Participant_id_invalid":
                     # telegram was quicker and they banned the account
                     pass
             except Forbidden:
                 pass
+
             text = f"{update.effective_user.mention_html()} banned the join request."
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
@@ -265,12 +272,12 @@ async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
     for message_id in reversed(messages_to_edit):
         try:
             await bot.edit_message_reply_markup(
-                chat_id=JOINREQUESTCHAT, message_id=message_id, reply_markup=None
+                chat_id=APPROVE_GROUP_ID, message_id=message_id, reply_markup=None
             )
         except RetryAfter as e:
             await asyncio.sleep(e.retry_after)
             await bot.edit_message_reply_markup(
-                chat_id=JOINREQUESTCHAT, message_id=message_id, reply_markup=None
+                chat_id=APPROVE_GROUP_ID, message_id=message_id, reply_markup=None
             )
         await asyncio.sleep(1)
 
@@ -406,7 +413,7 @@ if __name__ == "__main__":
     application.add_handler(ChatJoinRequestHandler(join_request))
     application.add_handler(
         MessageHandler(
-            filters.Chat(JOINREQUESTCHAT) & filters.REPLY & filters.TEXT,
+            filters.Chat(APPROVE_GROUP_ID) & filters.REPLY & filters.TEXT,
             message_from_group,
         )
     )
