@@ -20,7 +20,7 @@ from telegram import (
     Dice,
     Contact,
 )
-from telegram.error import RetryAfter, Forbidden, BadRequest
+from telegram.error import RetryAfter, Forbidden, BadRequest, ChatMigrated
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
