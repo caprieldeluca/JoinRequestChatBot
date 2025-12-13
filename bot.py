@@ -288,7 +288,6 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
             chat_id=user_id,
             from_chat_id=update.effective_chat.id,
             message_id=update.effective_message.message_id,
-            message_thread_id=TOPIC_ID,
         )
     except Forbidden:
         message = await update.effective_message.reply_text(
