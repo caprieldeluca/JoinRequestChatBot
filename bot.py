@@ -88,7 +88,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
     # Finally, send the message
-    await context.bot.send_message(chat_id=DEVCHAT, text=message)
+    await context.bot.send_message(chat_id=DEV_CHAT_ID, text=message)
 
 
 def create_buttons(user_id: int):
