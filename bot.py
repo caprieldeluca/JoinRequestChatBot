@@ -3,6 +3,7 @@ import datetime
 import html
 import json
 import logging
+import os
 import traceback
 
 from telegram import (
@@ -429,7 +430,7 @@ if __name__ == "__main__":
     persistence = PicklePersistence(filepath="bot_data.pickle")
     application = (
         ApplicationBuilder()
-        .token("TOKEN")
+        .token(os.environ['TOKEN'])
         .defaults(defaults)
         .persistence(persistence)
         .post_init(first_run_check)
