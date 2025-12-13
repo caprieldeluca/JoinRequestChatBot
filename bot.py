@@ -53,6 +53,15 @@ APPROVE_GROUP_ID = -1003290766088 # chat de OSM Root
 TOPIC_ID = 2  # but this is the message_thread_id of the topic
 DEV_CHAT_ID = -1003290766088  # chat de debug
 
+WELCOME_MESSAGE = """Hola! Soy el bot que gestiona los ingresos en el grupo de OpenStreetMap Argentina. Antes de aceptar tu solicitud, por favor contame:
+
+👉 de dónde sos
+👉 cómo conociste el grupo
+👉 si usás OSM y cuál es tu usuario (si ya lo tenés)
+
+Es para asegurarme de que tenés un interés genuino en nuestra comunidad.
+Si no respondés en un día, rechazaré la solicitud (pero podés volver a pedir ingreso después). Gracias!"""
+
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and send a telegram message to notify the developer."""
@@ -176,14 +185,13 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         # the return is important so we don't do the things below again
         return
-    await context.bot.send_message(
-        chat_id=update.effective_user.id,
-        text="Thank you for wanting to join the Translations talk group. Please reply to this message telling why you "
-        "want to join, so that the admins can make sure you're human — <i>not</i> a bot — "
-        "and accept your request!",
-    )
+
+    # send welcome message
+    await context.bot.send_message(chat_id=update.effective_user.id, text=WELCOME_MESSAGE)
+
     # this needs to be a get_chat, because has_private_forwards is only set here
     user = await context.bot.get_chat(chat_id=update.effective_user.id)
+
     if user.has_private_forwards and not user.username:
         message = f"The user {user.full_name} has sent a join request, but can not be mentioned :(."
         context.bot_data["user_mentions"][user.id] = user.full_name
