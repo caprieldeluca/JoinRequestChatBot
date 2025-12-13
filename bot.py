@@ -110,7 +110,8 @@ def update_job(job_queue: JobQueue, job_name: int):
     except IndexError:
         # this can happen after a restart. No need to worry about this.
         return
-    d = datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+
+    d = datetime.datetime.utcnow() + datetime.timedelta(days=1)
     job.job.reschedule("date", run_date=d)
 
 
@@ -186,7 +187,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.bot_data["messages_to_edit"][user.id] = [send_message.message_id]
         context.bot_data["last_message_to_user"][user.id] = send_message.message_id
     context.job_queue.run_once(
-        reject_job, datetime.timedelta(hours=24), user_id=user.id, name=str(user.id)
+        reject_job, datetime.timedelta(days=1), user_id=user.id, name=str(user.id)
     )
 
 
