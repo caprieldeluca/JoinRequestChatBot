@@ -407,14 +407,6 @@ async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
         await asyncio.sleep(1)
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="I'm a bot for the Translation Platform Talk group. You can find my source code on GitHub, "
-        "check out https://github.com/poolitzer/JoinRequestChatBot",
-    )
-
-
 async def first_run_check(ready_application: Application):
     if "messages_to_edit" not in ready_application.bot_data:
         application.bot_data["messages_to_edit"] = {}
@@ -443,7 +435,6 @@ if __name__ == "__main__":
             message_from_group,
         )
     )
-    application.add_handler(CommandHandler("start", start))
     application.add_handler(
         MessageHandler(filters.ChatType.PRIVATE, message_from_private)
     )
