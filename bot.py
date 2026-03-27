@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import traceback
+import yaml
 
 from telegram import (
     Update,
@@ -36,33 +37,50 @@ from telegram.ext import (
 )
 from typing import List
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.ERROR,
-    filename="log.log",
-)
-
 logger = logging.getLogger(__name__)
 
-# APPROVE_GROUP_ID = -1001391599953 # chat de OSM Root
-# GROUP_ID = -1001034791091 # OSM # -1003041316586 # chat de Test (el supergroup, el original era: -4660544582)
-# TOPIC_ID = 17836  # but this is the message_thread_id of the topic
-# DEV_CHAT_ID = 1022183970 # chat de debug
+ENV_TOKEN = "TOKEN"
+ENV_CONFIG_PATH = "CONFIG_PATH"
+DEFAULT_CONFIG_PATH = "config.yaml"
 
-GROUP_ID = -1003290766088 # OSM # -1003041316586 # chat de Test (el supergroup, el original era: -4660544582)
-APPROVE_GROUP_ID = -1003290766088 # chat de OSM Root
-TOPIC_ID = 2  # but this is the message_thread_id of the topic
-DEV_CHAT_ID = -1003290766088  # chat de debug
+def load_configs():
+    """
+    Loads the token and configuration variables.
 
-WELCOME_MESSAGE = """Hola! Soy el bot que gestiona los ingresos en el grupo de OpenStreetMap Argentina. Antes de aceptar tu solicitud, por favor contame:
+    Accepts no arguments.
 
-👉 de dónde sos
-👉 cómo conociste el grupo
-👉 si usás OSM y cuál es tu usuario (si ya lo tenés)
+    Returns:
+        tuple[str, dict]:
+            - Token (str) retrieved from the 'TOKEN' environment variable.
+            - Configuration variables (dict) loaded from a YAML file.
+              Default path is 'config.yaml', which can be overridden
+              via the 'CONFIG_PATH' environment variable.
 
-Es para asegurarme de que tenés un interés genuino en nuestra comunidad.
-Si no respondés en un día, rechazaré la solicitud (pero podés volver a pedir ingreso después). Gracias!"""
+    Raises:
+        ValueError: If the 'TOKEN' environment variable is not defined.
+        RuntimeError: If the configuration file is missing, inaccessible,
+            or fails to load due to YAML errors.
+    """
+    # Errors here cause the application to stop.
+    # Prints to STDERR for explicit capture in the service.
 
+    token = os.getenv(ENV_TOKEN)
+    if not token:
+        error_msg = "TOKEN environment variable not found."
+        print(f"ERROR: {error_msg}", file=os.sys.stderr)
+        raise ValueError(error_msg)
+
+    config_path = os.getenv(ENV_CONFIG_PATH, DEFAULT_CONFIG_PATH)
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+    except (FileNotFoundError, PermissionError, yaml.YAMLError) as e:
+        exc_name = type(e).__name__
+        error_msg = f"{exc_name}: {e}"
+        print(f"ERROR: {error_msg}", file=os.sys.stderr)
+        raise RuntimeError(error_msg) from e
+
+    return token, config
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and send a telegram message to notify the developer."""
@@ -89,7 +107,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
     # Finally, send the message
-    await context.bot.send_message(chat_id=DEV_CHAT_ID, text=message)
+    await context.bot.send_message(chat_id=config["dev_chat_id"], text=message)
 
 
 def create_buttons(user_id: int):
@@ -135,7 +153,7 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
             raise
 
     try:
-        await context.bot.decline_chat_join_request(chat_id=GROUP_ID, user_id=user_id)
+        await context.bot.decline_chat_join_request(chat_id=config['group_id'], user_id=user_id)
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
             # seems that someone already took care of that join request
@@ -147,7 +165,7 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
         context,
         # this gave me a key error a couple times for a user which got rejected. Not sure why. cant reproduce
         "Join request of " + context.bot_data["user_mentions"][user_id] + " expired.",
-        APPROVE_GROUP_ID,
+        config["approve_group_id"],
         user_id,
         context.bot_data["last_message_to_user"][user_id],
     )
@@ -164,7 +182,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # send welcome message
-    await context.bot.send_message(chat_id=update.effective_user.id, text=WELCOME_MESSAGE)
+    await context.bot.send_message(chat_id=update.effective_user.id, text=config["welcome_message"])
 
     # this needs to be a get_chat, because has_private_forwards is only set here
     user = await context.bot.get_chat(chat_id=update.effective_user.id)
@@ -182,7 +200,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.bot_data["user_mentions"][user.id] = mention
 
     send_message = await context.bot.send_message(
-        chat_id=APPROVE_GROUP_ID, text=message, message_thread_id=TOPIC_ID, reply_markup=create_buttons(user.id)
+        chat_id=config["approve_group_id"], text=message, message_thread_id=config["topic_id"], reply_markup=create_buttons(user.id)
     )
 
     if user.id in context.bot_data["messages_to_edit"]:
@@ -207,9 +225,9 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
     if update.effective_message.effective_attachment:
         # Polls need to be forwarded
         if isinstance(update.effective_message.effective_attachment, Poll):
-            await update.effective_message.forward(APPROVE_GROUP_ID)
+            await update.effective_message.forward(config["approve_group_id"])
             message = await context.bot.send_message(
-                chat_id=APPROVE_GROUP_ID,
+                chat_id=config["approve_group_id"],
                 text=f"The above Poll was sent by {user_mention}",
                 reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
                 reply_markup=create_buttons(user_id),
@@ -224,10 +242,10 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         message = await update.effective_message.copy(
-            chat_id=APPROVE_GROUP_ID,
+            chat_id=config["approve_group_id"],
             caption=f"{previous_caption}This message was sent by {user_mention}",
             reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-            message_thread_id=TOPIC_ID,
+            message_thread_id=config["topic_id"],
             reply_markup=create_buttons(user_id),
         )
 
@@ -238,7 +256,7 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
             (Audio, VideoNote, Venue, Sticker, Location, Dice, Contact),
         ):
             message = await context.bot.send_message(
-                chat_id=APPROVE_GROUP_ID,
+                chat_id=config["approve_group_id"],
                 text=f"The above message was sent by {user_mention}",
                 reply_to_message_id=message.message_id,
                 reply_markup=create_buttons(user_id),
@@ -246,10 +264,10 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
             context.bot_data["messages_to_edit"][user_id].append(message.message_id)
     else:
         message = await context.bot.send_message(
-            chat_id=APPROVE_GROUP_ID,
+            chat_id=config["approve_group_id"],
             text=f"{update.effective_message.text_html_urled}\n\nThis message was sent by {user_mention}",
             reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-            message_thread_id=TOPIC_ID,
+            message_thread_id=config["topic_id"],
             reply_markup=create_buttons(user_id),
         )
         context.bot_data["messages_to_edit"][user_id].append(message.message_id)
@@ -312,7 +330,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if data[0] == "y":
             try:
-                await context.bot.approve_chat_join_request(chat_id=GROUP_ID, user_id=user_id)
+                await context.bot.approve_chat_join_request(chat_id=config["main_group_id"], user_id=user_id)
             except Forbidden:
                 # telegram disabled the account
                 pass
@@ -320,15 +338,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = f"{update.effective_user.mention_html()} accepted the join request."
         elif data[0] == "n":
             try:
-                await context.bot.decline_chat_join_request(chat_id=GROUP_ID, user_id=user_id)
+                await context.bot.decline_chat_join_request(chat_id=config["main_group_id"], user_id=user_id)
             except Forbidden:
                 pass
 
             text = f"{update.effective_user.mention_html()} rejected the join request."
         else:
             try:
-                await context.bot.ban_chat_member(chat_id=GROUP_ID, user_id=user_id)
-                await context.bot.decline_chat_join_request(chat_id=GROUP_ID, user_id=user_id)
+                await context.bot.ban_chat_member(chat_id=config["main_group_id"], user_id=user_id)
+                await context.bot.decline_chat_join_request(chat_id=config["main_group_id"], user_id=user_id)
             except BadRequest as e:
                 if e.message == "Participant_id_invalid":
                     # telegram was quicker and they banned the account
@@ -397,12 +415,12 @@ async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
     for message_id in reversed(messages_to_edit):
         try:
             await bot.edit_message_reply_markup(
-                chat_id=APPROVE_GROUP_ID, message_id=message_id, reply_markup=None
+                chat_id=config["approve_group_id"], message_id=message_id, reply_markup=None
             )
         except RetryAfter as e:
             await asyncio.sleep(e.retry_after)
             await bot.edit_message_reply_markup(
-                chat_id=APPROVE_GROUP_ID, message_id=message_id, reply_markup=None
+                chat_id=config["approve_group_id"], message_id=message_id, reply_markup=None
             )
         await asyncio.sleep(1)
 
@@ -417,11 +435,20 @@ async def first_run_check(ready_application: Application):
 
 
 if __name__ == "__main__":
+    token, config = load_configs()
+
+    # TODO: Handle log and persistence files system errors.
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.ERROR,
+        filename=config["log_path"],
+    )
+    persistence = PicklePersistence(filepath=config["state_path"])
+
     defaults = Defaults(parse_mode="html")
-    persistence = PicklePersistence(filepath="bot_data.pickle")
     application = (
         ApplicationBuilder()
-        .token(os.environ['TOKEN'])
+        .token(token)
         .defaults(defaults)
         .persistence(persistence)
         .post_init(first_run_check)
@@ -431,7 +458,7 @@ if __name__ == "__main__":
     application.add_handler(ChatJoinRequestHandler(join_request))
     application.add_handler(
         MessageHandler(
-            filters.Chat(APPROVE_GROUP_ID) & filters.REPLY & filters.TEXT,
+            filters.Chat(config["approve_group_id"]) & filters.REPLY & filters.TEXT,
             message_from_group,
         )
     )

@@ -1,0 +1,20 @@
+# IDs
+main_group_id: -1003290766088    # grupo OSM
+approve_group_id: -1003290766088 # grupo de OSM Root
+topic_id: 2                      # topic de ingresos en OSM Root
+dev_chat_id: -1003290766088      # chat de debug
+
+# Paths
+state_path: "bot_data.pickle"
+log_path: "log.log"
+
+# Mensajes
+welcome_message: |
+  Hola! Soy el bot que gestiona los ingresos en el grupo de OpenStreetMap Argentina. Antes de aceptar tu solicitud, por favor contame:
+
+  👉 de dónde sos
+  👉 cómo conociste el grupo
+  👉 si usás OSM y cuál es tu usuario (si ya lo tenés)
+
+  Es para asegurarme de que tenés un interés genuino en nuestra comunidad.
+  Si no respondés en un día, rechazaré la solicitud (pero podés volver a pedir ingreso después). Gracias!
