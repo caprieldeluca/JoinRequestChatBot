@@ -1,5 +1,5 @@
 # JoinRequestChatBot
-<sub>fork of https://github.com/Poolitzer/JoinRequestChatBot</sub>
+<sub>(A fork of https://github.com/Poolitzer/JoinRequestChatBot)</sub>
 
 This is a small bot which forwards all chats from people trying to join your group to a second group (probably consistent of your admins), and all messages from that second group back to the proper private chat.
 
@@ -11,7 +11,7 @@ You can send a reply with a !, the bot ignores these messages.
 
 Also features a 24 hour timer after the last send message, after which the wanting-to-join users join request is rejected.
 
-Add the bot with add member + ban users right in the main group. Set the `mainchat` variable on line 38 to your main chat id, the `joinrequestchat` to the one you want to handle the join requests in, the `devchat` to the chat you want to receive errors in. Oh, and don't forget to add your token in line 223.
+Add the bot with add member + ban users right in the main group.
 
 ---
 
@@ -38,7 +38,7 @@ uv sync
 nano config.yaml
 ```
 
-4. Correr el bot (CONFIG_PATH="config.yaml" por omisión):
+4. Correr el bot (`CONFIG_PATH="config.yaml"` por omisión):
 ```bash
 TOKEN="Your:Token-Here" uv run bot.py
 ```
