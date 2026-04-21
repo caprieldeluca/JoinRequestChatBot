@@ -1,7 +1,7 @@
 # IDs
-main_group_id: -1003290766088    # grupo OSM
-approve_group_id: -1003290766088 # grupo de OSM Root
-topic_id: 2                      # topic de ingresos en OSM Root
+main_group_id: -1003290766088    # grupo OSM-AR
+approve_group_id: -1003290766088 # grupo de OSM-AR Root
+topic_id: 2                      # topic de ingresos en OSM-AR Root
 dev_chat_id: -1003290766088      # chat de debug
 
 # Paths

@@ -1,4 +1,5 @@
 # JoinRequestChatBot
+<sub>fork of https://github.com/Poolitzer/JoinRequestChatBot</sub>
 
 This is a small bot which forwards all chats from people trying to join your group to a second group (probably consistent of your admins), and all messages from that second group back to the proper private chat.
 
@@ -14,7 +15,7 @@ Add the bot with add member + ban users right in the main group. Set the `mainch
 
 ---
 
-## Adaptaciones de OSM-ar
+## Adaptaciones de OSM-AR
 
 - Usamos [`uv`](https://docs.astral.sh/uv/) para crear el entorno Python.
 - Las variables se configuran en un archivo `config.yaml`.
@@ -37,7 +38,7 @@ uv sync
 nano config.yaml
 ```
 
-4. Correr el bot:
+4. Correr el bot (CONFIG_PATH="config.yaml" por omisión):
 ```bash
 TOKEN="Your:Token-Here" uv run bot.py
 ```
@@ -52,13 +53,14 @@ cp .env.example .env && nano .env
 2. Crear un script en bash que ejecute el bot con entorno personalizado. Por ejemplo:
 ```bash
 #!/usr/bin/env bash
+set -eu
 
-# Rutas
+# Rutas (adaptar y endurecer según corresponda)
 ENV_FILE=".env"
 PYTHON=".venv/bin/python"
 BOT="bot.py"
 
-# Cargar variables de entorno (exportar automáticamente)
+# Exportar variables de entorno
 set -a
 source "$ENV_FILE"
 set +a
