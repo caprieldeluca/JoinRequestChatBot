@@ -6,6 +6,7 @@ import logging
 import os
 import traceback
 import yaml
+from pathlib import Path
 
 from telegram import (
     Update,
@@ -41,28 +42,34 @@ logger = logging.getLogger(__name__)
 
 ENV_TOKEN = "TOKEN"
 ENV_CONFIG_PATH = "CONFIG_PATH"
-DEFAULT_CONFIG_PATH = "config.yaml"
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_CONFIG_PATH = BASE_DIR / "config.yaml"
 
 def load_configs():
     """
     Loads the token and configuration variables.
+
+    Default config variables are loaded from './config.yaml'.
+    Custom configuration variables, which override default ones,
+        can be loaded from a YAML file via the 'CONFIG_PATH' environment variable.
+    All custom variables are optional. A warning is printed if `CONFIG_PATH`
+        is not defined. Custom variables override default ones with the same name.
+        Variable names can't be added.
 
     Accepts no arguments.
 
     Returns:
         tuple[str, dict]:
             - Token (str) retrieved from the 'TOKEN' environment variable.
-            - Configuration variables (dict) loaded from a YAML file.
-              Default path is 'config.yaml', which can be overridden
-              via the 'CONFIG_PATH' environment variable.
-
+            - Configuration variables (dict), include defaults and custom overrides.
     Raises:
         ValueError: If the 'TOKEN' environment variable is not defined.
-        RuntimeError: If the configuration file is missing, inaccessible,
-            or fails to load due to YAML errors.
+        RuntimeError: If configuration files (default and custom if defined)
+            are missing, inaccessible, or fail to load due to YAML errors.
     """
     # Errors here cause the application to stop.
-    # Prints to STDERR for explicit capture in the service.
+    # Prints to STDERR and STDOUT for explicit capture in the service.
+    # TODO: Integrate sys outputs and bot logs.
 
     token = os.getenv(ENV_TOKEN)
     if not token:
@@ -70,10 +77,19 @@ def load_configs():
         print(f"ERROR: {error_msg}", file=os.sys.stderr)
         raise ValueError(error_msg)
 
-    config_path = os.getenv(ENV_CONFIG_PATH, DEFAULT_CONFIG_PATH)
+    custom_config_path = os.getenv(ENV_CONFIG_PATH)
+    if not custom_config_path:
+        warn_msg = "WARNING: ENV_CONFIG_PATH environment variable not found, using only config defaults."
+        print(warn_msg, file=os.sys.stdout)
+
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(DEFAULT_CONFIG_PATH, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
+        with open(custom_config_path, 'r', encoding='utf-8') as f:
+            custom_config = yaml.safe_load(f) or {}
+
+        _apply_overrides(config, custom_config)
+
     except (FileNotFoundError, PermissionError, yaml.YAMLError) as e:
         exc_name = type(e).__name__
         error_msg = f"{exc_name}: {e}"
@@ -81,6 +97,19 @@ def load_configs():
         raise RuntimeError(error_msg) from e
 
     return token, config
+
+def _apply_overrides(base, overrides):
+    """Helper function for recursive override of config options."""
+    for key, value in overrides.items():
+        if key in base:
+            if isinstance(value, dict) and isinstance(base[key], dict):
+                apply_overrides(base[key], value)
+            else:
+                base[key] = value
+        else:
+            warn_msg = f"New variable name found in custom config: '{key}'. Ignored."
+            print(warn_msg, file=os.sys.stdout)
+
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and send a telegram message to notify the developer."""

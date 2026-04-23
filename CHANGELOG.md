@@ -5,7 +5,7 @@ Registro de cambios.
 ## [Unreleased]
 
 ### Changed
--
+- Configuraciones personalizadas son opcionales y pueden sobreescribir las del archivo de configuraciones por defecto.
 
 ---
 
