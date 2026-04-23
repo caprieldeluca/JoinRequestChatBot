@@ -2,3 +2,7 @@
 .env
 .env.*
 !.env.example
+
+# Default artifacts names
+bot_data.pickle
+log.log
