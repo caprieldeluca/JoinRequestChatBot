@@ -153,7 +153,16 @@ def create_buttons(user_id: int):
 
 
 def update_job(job_queue: JobQueue, job_name: int):
-    """Changes the date of a scheduled job."""
+    """
+    Changes the date trigger of a scheduled job.
+
+    Params:
+        job_queue: The queue of scheduled jobs.
+        job_name: Name of the job to update. It is the related user_id.
+
+    Returns:
+        datetime.datetime: UTC datetime of the updated job trigger.
+    """
     try:
         job = job_queue.get_jobs_by_name(str(job_name))[0]
     except IndexError:
@@ -162,6 +171,7 @@ def update_job(job_queue: JobQueue, job_name: int):
 
     d = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=config["expiration_minutes"])
     job.job.reschedule("date", run_date=d)
+    return d
 
 
 async def reject_job(context: ContextTypes.DEFAULT_TYPE):
@@ -249,6 +259,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id=user.id,
         name=str(user.id)
     )
+    context.bot_data["user_expiration"][user.id] = str(d)
 
 
 async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -309,8 +320,9 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         context.bot_data["messages_to_edit"][user_id].append(message.message_id)
 
-    # kick the deadline 24h down the road
-    update_job(context.job_queue, user_id)
+    # kick the deadline
+    d = update_job(context.job_queue, user_id)
+    context.bot_data["user_expiration"][user_id] = str(d)
 
 
 async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -357,7 +369,9 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=create_buttons(user_id),
     )
     context.bot_data["messages_to_edit"][user_id].append(send_message.message_id)
-    update_job(context.job_queue, user_id)
+    # kick the deadline
+    d = update_job(context.job_queue, user_id)
+    context.bot_data["user_expiration"][user_id] = str(d)
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -441,6 +455,7 @@ async def finish_user(
         del context.bot_data["messages_to_edit"][user_id]
         del context.bot_data["last_message_to_user"][user_id]
         del context.bot_data["user_mentions"][user_id]
+        del context.bot_data["user_expiration"][user_id]
     except KeyError:
         # this can happen in a race condition.
         pass
@@ -469,7 +484,8 @@ async def first_run_check(ready_application: Application):
         application.bot_data["user_mentions"] = {}
     if "last_message_to_user" not in ready_application.bot_data:
         application.bot_data["last_message_to_user"] = {}
-
+    if "user_expiration" not in ready_application.bot_data:
+        application.bot_data["user_expiration"] = {}
 
 if __name__ == "__main__":
     token, config = load_configs()
