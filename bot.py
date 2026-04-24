@@ -153,6 +153,7 @@ def create_buttons(user_id: int):
 
 
 def update_job(job_queue: JobQueue, job_name: int):
+    """Changes the date of a scheduled job."""
     try:
         job = job_queue.get_jobs_by_name(str(job_name))[0]
     except IndexError:
@@ -182,7 +183,7 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
             raise
 
     try:
-        await context.bot.decline_chat_join_request(chat_id=config['group_id'], user_id=user_id)
+        await context.bot.decline_chat_join_request(chat_id=config['main_group_id'], user_id=user_id)
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
             # seems that someone already took care of that join request
@@ -229,7 +230,10 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.bot_data["user_mentions"][user.id] = mention
 
     send_message = await context.bot.send_message(
-        chat_id=config["approve_group_id"], text=message, message_thread_id=config["topic_id"], reply_markup=create_buttons(user.id)
+        chat_id=config["approve_group_id"],
+        text=message,
+        message_thread_id=config["topic_id"],
+        reply_markup=create_buttons(user.id)
     )
 
     if user.id in context.bot_data["messages_to_edit"]:
@@ -238,8 +242,12 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.bot_data["messages_to_edit"][user.id] = [send_message.message_id]
         context.bot_data["last_message_to_user"][user.id] = send_message.message_id
 
+    d = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=config["expiration_minutes"])
     context.job_queue.run_once(
-        reject_job, datetime.timedelta(days=1), user_id=user.id, name=str(user.id)
+        reject_job,
+        when=d,
+        user_id=user.id,
+        name=str(user.id)
     )
 
 
