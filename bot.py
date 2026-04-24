@@ -159,7 +159,7 @@ def update_job(job_queue: JobQueue, job_name: int):
         # this can happen after a restart. No need to worry about this.
         return
 
-    d = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+    d = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=config["expiration_minutes"])
     job.job.reschedule("date", run_date=d)
 
 

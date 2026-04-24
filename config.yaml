@@ -8,6 +8,9 @@ dev_chat_id: -1003290766088      # chat de debug
 state_path: "bot_data.pickle"
 log_path: "log.log"
 
+# Options
+expiration_minutes: 1440 # 1 day
+
 # Mensajes
 welcome_message: |
   Hola! Soy el bot que gestiona los ingresos en el grupo de OpenStreetMap Argentina. Antes de aceptar tu solicitud, por favor contame:
