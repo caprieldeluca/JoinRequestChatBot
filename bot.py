@@ -369,7 +369,7 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=create_buttons(user_id),
     )
     context.bot_data["messages_to_edit"][user_id].append(send_message.message_id)
-    # kick the deadline
+    # Kick the deadline. Note than update_job returns the new datetime object.
     d = update_job(context.job_queue, user_id)
     context.bot_data["user_expiration"][user_id] = str(d)
 
@@ -478,6 +478,17 @@ async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
 
 
 async def first_run_check(ready_application: Application):
+    """
+    Initializes necessary data structure for the application.
+
+    Params:
+        ready_application: The state of the built application, after load
+            persistence and before attaching handlers.
+
+    Returns:
+        None, but modifies `application` state just before `run_polling`.
+    """
+    # Create empty bot_data items if there are not previous ones.
     if "messages_to_edit" not in ready_application.bot_data:
         application.bot_data["messages_to_edit"] = {}
     if "user_mentions" not in ready_application.bot_data:
@@ -486,6 +497,23 @@ async def first_run_check(ready_application: Application):
         application.bot_data["last_message_to_user"] = {}
     if "user_expiration" not in ready_application.bot_data:
         application.bot_data["user_expiration"] = {}
+
+    # Restore scheduled reject jobs.
+    for key, value in ready_application.bot_data["user_expiration"].items():
+        user_id = key
+        d = datetime.datetime.fromisoformat(value)
+        now = datetime.datetime.now(datetime.UTC)
+        if d < now:
+            # Expired. Reschedule to one minute from now
+            d = now + datetime.timedelta(minutes=1)
+
+        application.job_queue.run_once(
+            reject_job,
+            when=d,
+            user_id=user_id,
+            name=str(user_id)
+        )
+
 
 if __name__ == "__main__":
     token, config = load_configs()

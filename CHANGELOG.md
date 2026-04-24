@@ -4,6 +4,9 @@ Registro de cambios.
 
 ## [Unreleased]
 
+### Added
+- Los tiempos de expiración se guardan en la persistencia y se agendan nuevamente al reiniciar.
+
 ### Changed
 - Configuraciones personalizadas son opcionales y pueden sobreescribir las del archivo de configuraciones por defecto.
 
