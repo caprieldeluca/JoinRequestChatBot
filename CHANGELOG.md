@@ -1,30 +1,30 @@
 # Changelog
 
-Registro de cambios.
-
 ## [Unreleased]
 
 ### Added
-- Los tiempos de expiración se guardan en la persistencia y se agendan nuevamente al reiniciar.
+- Persistent expiration times. Expiration rejection jobs are rescheduled on startup.
 
 ### Changed
-- Configuraciones personalizadas son opcionales y pueden sobreescribir las del archivo de configuraciones por defecto.
+- Custom configuration variables are optional and override defaults.
+- Custom configuration path environment variable name is now `CUSTOM_CONFIG_PATH`.
+- Approve topic ID configuration variable name is now `requests_appr_tid`.
 
 ---
 
 ## [0.1.0] - 2026-04-21
 
 ### Added
-- Archivo de configuración YAML personalizado.
-- Variables de entorno mediante archivo `.env`.
+- Custom YAML configuration file.
+- Environment variables via `.env` file.
 
 ### Changed
-- Texto en los botones.
-- Todos los mensajes del bot van a un topic del approve group.
+- Text in buttons.
+- All bot messages from private chats go to a topic inside approve group.
 - Adaptación del bot para entorno de despliegue.
 
 ### Fixed
-- Dependencia `job-queue` faltante en la instalación de `python-telegram-bot`.
+- `job-queue` dependency in `python-telegram-bot`.
 
 ### Removed
-- Se quitó el comando start (los créditos al código fuente original se integrarán en el mensaje de bienvenida).
+- `/start` command (link to source code included in Bot's description).

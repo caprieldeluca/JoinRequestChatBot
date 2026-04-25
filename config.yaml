@@ -1,8 +1,12 @@
-# IDs
-main_group_id: -1003290766088    # grupo OSM-AR
-approve_group_id: -1003290766088 # grupo de OSM-AR Root
-topic_id: 2                      # topic de ingresos en OSM-AR Root
-dev_chat_id: -1003290766088      # chat de debug
+# Any variable can be overridden via 'custom_config.yaml' (path set by optional environment variable).
+
+# IDs (valid values must be defined for the bot to function)
+## Groups
+dev_chat_id: 0
+main_group_id: 0
+approve_group_id: 0
+## Topics
+requests_appr_tid: 0
 
 # Paths
 state_path: "bot_data.pickle"

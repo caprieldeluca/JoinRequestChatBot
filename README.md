@@ -9,7 +9,7 @@ Every message is supported, a wanting-to-join user message will reply to the las
 
 You can send a reply with a !, the bot ignores these messages.
 
-Also features a 24 hour timer after the last send message, after which the wanting-to-join users join request is rejected.
+Also features a configurable 24 hour timer after the last send message, after which the wanting-to-join users join request is rejected.
 
 Add the bot with add member + ban users right in the main group.
 

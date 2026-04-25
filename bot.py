@@ -4,6 +4,7 @@ import html
 import json
 import logging
 import os
+import sys
 import traceback
 import yaml
 from pathlib import Path
@@ -40,75 +41,90 @@ from typing import List
 
 logger = logging.getLogger(__name__)
 
+# Environment variable names.
 ENV_TOKEN = "TOKEN"
-ENV_CONFIG_PATH = "CONFIG_PATH"
-BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = BASE_DIR / "config.yaml"
+ENV_CUSTOM_CONFIG = "CUSTOM_CONFIG_PATH" # Optional.
+
+# Hardcoded (next to this file) default config path (required).
+DEFAULT_CONFIG = Path(__file__).resolve().parent / "config.yaml"
 
 def load_configs():
     """
-    Loads the token and configuration variables.
+    Loads the Bot token and configuration variables.
 
-    Default config variables are loaded from './config.yaml'.
-    Custom configuration variables, which override default ones,
-        can be loaded from a YAML file via the 'CONFIG_PATH' environment variable.
-    All custom variables are optional. A warning is printed if `CONFIG_PATH`
-        is not defined. Custom variables override default ones with the same name.
-        Variable names can't be added.
+    Mandatory default configuration values are loaded from 'config.yaml'
+        (must be located in the same directory as 'bot.py'). These can be
+        overridden by a custom YAML file specified via the 'CUSTOM_CONFIG_PATH'
+        environment variable.
 
-    Accepts no arguments.
+    All custom variables are optional. If 'CUSTOM_CONFIG_PATH' is undefined,
+        only defaults are used. Custom keys not present in the default
+        configuration are ignored.
 
     Returns:
         tuple[str, dict]:
             - Token (str) retrieved from the 'TOKEN' environment variable.
-            - Configuration variables (dict), include defaults and custom overrides.
+            - Configuration (dict) containing merged default and custom values.
+
     Raises:
-        ValueError: If the 'TOKEN' environment variable is not defined.
-        RuntimeError: If configuration files (default and custom if defined)
-            are missing, inaccessible, or fail to load due to YAML errors.
+        ValueError: If 'TOKEN' environment variable is missing.
+        RuntimeError: If configuration files are missing, inaccessible,
+            or contain invalid YAML syntax.
     """
-    # Errors here cause the application to stop.
+    # Errors here cause the script to stop.
     # Prints to STDERR and STDOUT for explicit capture in the service.
     # TODO: Integrate sys outputs and bot logs.
 
+    # Token.
     token = os.getenv(ENV_TOKEN)
     if not token:
         error_msg = "TOKEN environment variable not found."
-        print(f"ERROR: {error_msg}", file=os.sys.stderr)
+        print(f"ERROR: {error_msg}", file=sys.stderr)
         raise ValueError(error_msg)
 
-    custom_config_path = os.getenv(ENV_CONFIG_PATH)
-    if not custom_config_path:
-        warn_msg = "WARNING: ENV_CONFIG_PATH environment variable not found, using only config defaults."
-        print(warn_msg, file=os.sys.stdout)
-
+    # Default config.
     try:
-        with open(DEFAULT_CONFIG_PATH, 'r', encoding='utf-8') as f:
+        with open(DEFAULT_CONFIG, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
-        with open(custom_config_path, 'r', encoding='utf-8') as f:
-            custom_config = yaml.safe_load(f) or {}
-
-        _apply_overrides(config, custom_config)
-
     except (FileNotFoundError, PermissionError, yaml.YAMLError) as e:
         exc_name = type(e).__name__
         error_msg = f"{exc_name}: {e}"
-        print(f"ERROR: {error_msg}", file=os.sys.stderr)
+        print(f"ERROR: {error_msg}", file=sys.stderr)
         raise RuntimeError(error_msg) from e
 
-    return token, config
+    # Custom config.
+    custom_config_path = os.getenv(ENV_CUSTOM_CONFIG)
+    if custom_config_path:
+        try:
+            with open(custom_config_path, 'r', encoding='utf-8') as f:
+                custom_config = yaml.safe_load(f) or {} # Empty custom config.
+        except (FileNotFoundError, PermissionError, yaml.YAMLError) as e:
+            exc_name = type(e).__name__
+            error_msg = f"{exc_name}: {e}"
+            print(f"ERROR: {error_msg}", file=sys.stderr)
+            raise RuntimeError(error_msg) from e
 
-def _apply_overrides(base, overrides):
-    """Helper function for recursive override of config options."""
-    for key, value in overrides.items():
-        if key in base:
-            if isinstance(value, dict) and isinstance(base[key], dict):
-                apply_overrides(base[key], value)
-            else:
-                base[key] = value
-        else:
-            warn_msg = f"New variable name found in custom config: '{key}'. Ignored."
-            print(warn_msg, file=os.sys.stdout)
+        def _apply_overrides(base, overrides):
+            """Helper recursive function to override config options."""
+            for key, value in overrides.items():
+                if key in base:
+                    if isinstance(value, dict) and isinstance(base[key], dict):
+                        _apply_overrides(base[key], value)
+                    elif value is not None:
+                        base[key] = value
+                    else:
+                        warn_msg = f"Configuration key '{key}' has no value in custom config. Ignored."
+                        print(warn_msg, file=sys.stdout)
+                else:
+                    warn_msg = f"New variable name found in custom config: '{key}'. Ignored."
+                    print(warn_msg, file=sys.stdout)
+
+        _apply_overrides(config, custom_config)
+    else:
+        warn_msg = f"WARNING: '{ENV_CUSTOM_CONFIG}' environment variable not found, using only config defaults."
+        print(warn_msg, file=sys.stdout)
+
+    return token, config
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -242,7 +258,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     send_message = await context.bot.send_message(
         chat_id=config["approve_group_id"],
         text=message,
-        message_thread_id=config["topic_id"],
+        message_thread_id=config["requests_appr_tid"],
         reply_markup=create_buttons(user.id)
     )
 
@@ -293,7 +309,7 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
             chat_id=config["approve_group_id"],
             caption=f"{previous_caption}This message was sent by {user_mention}",
             reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-            message_thread_id=config["topic_id"],
+            message_thread_id=config["requests_appr_tid"],
             reply_markup=create_buttons(user_id),
         )
 
@@ -315,7 +331,7 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
             chat_id=config["approve_group_id"],
             text=f"{update.effective_message.text_html_urled}\n\nThis message was sent by {user_mention}",
             reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-            message_thread_id=config["topic_id"],
+            message_thread_id=config["requests_appr_tid"],
             reply_markup=create_buttons(user_id),
         )
         context.bot_data["messages_to_edit"][user_id].append(message.message_id)
