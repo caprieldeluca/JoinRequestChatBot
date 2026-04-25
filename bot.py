@@ -529,6 +529,7 @@ async def first_run_check(ready_application: Application):
             user_id=user_id,
             name=str(user_id)
         )
+        await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
