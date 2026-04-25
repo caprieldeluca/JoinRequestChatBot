@@ -515,13 +515,15 @@ async def first_run_check(ready_application: Application):
         application.bot_data["user_expiration"] = {}
 
     # Restore scheduled reject jobs.
+    i = 0 # Count expired
     for key, value in ready_application.bot_data["user_expiration"].items():
         user_id = key
         d = datetime.datetime.fromisoformat(value)
         now = datetime.datetime.now(datetime.UTC)
         if d < now:
-            # Expired. Reschedule to one minute from now
-            d = now + datetime.timedelta(minutes=1)
+            # Expired. Reschedule to one minute + i seconds from now
+            d = now + datetime.timedelta(seconds=60+i)
+            i += 1
 
         application.job_queue.run_once(
             reject_job,
@@ -529,7 +531,6 @@ async def first_run_check(ready_application: Application):
             user_id=user_id,
             name=str(user_id)
         )
-        await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
