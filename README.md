@@ -17,8 +17,8 @@ Add the bot with add member + ban users right in the main group.
 
 ## Adaptaciones de OSM-AR
 
-- Usamos [`uv`](https://docs.astral.sh/uv/) para crear el entorno Python.
-- Las variables se configuran por defecto en el archivo `config.yaml`. Pueden ser sobreescritas por un archivo de configuraciones personalizadas.
+- Usamos [`uv`](https://docs.astral.sh/uv/) para el entorno Python (igualmente actualizamos `requirements.txt`).
+- Las variables están configuradas por defecto en el archivo `config.yaml`. Pueden ser sobreescritas por un archivo de configuraciones personalizadas.
 - El token del bot y la ruta al archivo de configuraciones personalizadas se cargan como variables de entorno.
 
 ### Instalación rápida
@@ -33,7 +33,7 @@ git clone https://codeberg.org/caprieldeluca/JoinRequestChatBot.git && cd JoinRe
 uv sync
 ```
 
-3. Editar el archivo de configuraciones por defecto:
+3. Editar el archivo de configuraciones por defecto (IDs requeridas):
 ```bash
 nano config.yaml
 ```

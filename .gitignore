@@ -6,3 +6,6 @@
 # Default artifacts names
 bot_data.pickle
 log.log
+
+# Proposed custom config file
+custom_config.yaml

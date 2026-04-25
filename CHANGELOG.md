@@ -6,9 +6,10 @@
 - Persistent expiration times. Expiration rejection jobs are rescheduled on startup.
 
 ### Changed
+- Default configuration (mandatory) path is resolved at runtime (to the same directory as bot.py).
 - Custom configuration variables are optional and override defaults.
-- Custom configuration path environment variable name is now `CUSTOM_CONFIG_PATH`.
-- Approve topic ID configuration variable name is now `requests_appr_tid`.
+- Custom configuration path environment variable name to `CUSTOM_CONFIG_PATH`.
+- Approve topic ID configuration variable name to `requests_appr_tid`.
 
 ---
 
@@ -21,10 +22,9 @@
 ### Changed
 - Text in buttons.
 - All bot messages from private chats go to a topic inside approve group.
-- Adaptación del bot para entorno de despliegue.
 
 ### Fixed
 - `job-queue` dependency in `python-telegram-bot`.
 
 ### Removed
-- `/start` command (link to source code included in Bot's description).
+- `/start` command (link to source code in Bot's description).
