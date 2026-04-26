@@ -6,7 +6,8 @@ dev_chat_id: 0
 main_group_id: 0
 approve_group_id: 0
 ## Topics (optional, used if truthy values are defined)
-requests_appr_tid: 0
+requests_appr_tid: 0 # Join requests messages.
+responses_appr_tid: 0 # Responses to bot messages.
 
 # Paths
 state_path: "bot_data.pickle"

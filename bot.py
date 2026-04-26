@@ -261,7 +261,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "text": message,
         "reply_markup": create_buttons(user.id)
     }
-    # Optional topic if no falsy value provided.
+    # Optional topic (if no falsy value provided).
     if config["requests_appr_tid"]:
         kwargs["message_thread_id"] = config["requests_appr_tid"]
 
@@ -332,13 +332,18 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             context.bot_data["messages_to_edit"][user_id].append(message.message_id)
     else:
-        message = await context.bot.send_message(
-            chat_id=config["approve_group_id"],
-            text=f"{update.effective_message.text_html_urled}\n\nThis message was sent by {user_mention}",
-            reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-            message_thread_id=config["requests_appr_tid"],
-            reply_markup=create_buttons(user_id),
-        )
+        # Define (keyword) args to send message.
+        kwargs = {
+            "chat_id": config["approve_group_id"],
+            "text": f"{update.effective_message.text_html_urled}\n\nThis message was sent by {user_mention}",
+            "reply_to_message_id": context.bot_data["last_message_to_user"][user_id],
+            "reply_markup": create_buttons(user_id)
+        }
+        # Optional topic (if no falsy value provided).
+        if config["responses_appr_tid"]:
+            kwargs["message_thread_id"] = config["responses_appr_tid"]
+
+        message = await context.bot.send_message(**kwargs)
         context.bot_data["messages_to_edit"][user_id].append(message.message_id)
 
     # kick the deadline
