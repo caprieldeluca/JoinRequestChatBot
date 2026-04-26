@@ -255,12 +255,17 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = f"The user {mention} has sent a join request \\o/"
         context.bot_data["user_mentions"][user.id] = mention
 
-    send_message = await context.bot.send_message(
-        chat_id=config["approve_group_id"],
-        text=message,
-        message_thread_id=config["requests_appr_tid"],
-        reply_markup=create_buttons(user.id)
-    )
+    # Define (keyword) args to send message.
+    kwargs = {
+        "chat_id": config["approve_group_id"],
+        "text": message,
+        "reply_markup": create_buttons(user.id)
+    }
+    # Optional topic if no falsy value provided.
+    if config["requests_appr_tid"]:
+        kwargs["message_thread_id"] = config["requests_appr_tid"]
+
+    send_message = await context.bot.send_message(**kwargs)
 
     if user.id in context.bot_data["messages_to_edit"]:
         context.bot_data["messages_to_edit"][user.id].append(send_message.message_id)

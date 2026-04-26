@@ -4,10 +4,11 @@
 
 ### Added
 - Persistent expiration times. Expiration rejection jobs are rescheduled on startup.
+- Custom configuration variables are optional and override defaults.
+- Send messages to topics is optional.
 
 ### Changed
 - Default configuration (mandatory) path is resolved at runtime (to the same directory as bot.py).
-- Custom configuration variables are optional and override defaults.
 - Custom configuration path environment variable name to `CUSTOM_CONFIG_PATH`.
 - Approve topic ID configuration variable name to `requests_appr_tid`.
 
