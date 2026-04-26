@@ -285,53 +285,19 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in context.bot_data["user_mentions"]:
-        # we don't know this user, just send a crappy message
+        # We don't know this user.
         await update.effective_message.reply_text("Hola :-)")
         return
 
-    user_id = update.effective_user.id
-    user_mention = context.bot_data["user_mentions"][user_id]
-    if update.effective_message.effective_attachment:
-        # Polls need to be forwarded
-        if isinstance(update.effective_message.effective_attachment, Poll):
-            await update.effective_message.forward(config["approve_group_id"])
-            message = await context.bot.send_message(
-                chat_id=config["approve_group_id"],
-                text=f"The above Poll was sent by {user_mention}",
-                reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-                reply_markup=create_buttons(user_id),
-            )
-            context.bot_data["messages_to_edit"][user_id].append(message.message_id)
-            return
+    elif update.effective_message.effective_attachment:
+        # We don't allow attachments.
+        await update.effective_message.reply_text("No puedo leer adjuntos :-(")
+        return
 
-        previous_caption = (
-            update.effective_message.caption + "\n\n"
-            if update.effective_message.caption
-            else ""
-        )
-
-        message = await update.effective_message.copy(
-            chat_id=config["approve_group_id"],
-            caption=f"{previous_caption}This message was sent by {user_mention}",
-            reply_to_message_id=context.bot_data["last_message_to_user"][user_id],
-            message_thread_id=config["requests_appr_tid"],
-            reply_markup=create_buttons(user_id),
-        )
-
-        context.bot_data["messages_to_edit"][user_id].append(message.message_id)
-        # all of these cant get a caption, so we have to send a message instead
-        if isinstance(
-            update.effective_message.effective_attachment,
-            (Audio, VideoNote, Venue, Sticker, Location, Dice, Contact),
-        ):
-            message = await context.bot.send_message(
-                chat_id=config["approve_group_id"],
-                text=f"The above message was sent by {user_mention}",
-                reply_to_message_id=message.message_id,
-                reply_markup=create_buttons(user_id),
-            )
-            context.bot_data["messages_to_edit"][user_id].append(message.message_id)
     else:
+        user_id = update.effective_user.id
+        user_mention = context.bot_data["user_mentions"][user_id]
+
         # Define (keyword) args to send message.
         kwargs = {
             "chat_id": config["approve_group_id"],
