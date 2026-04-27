@@ -1,5 +1,9 @@
-# Env files
-.env
+__pycache__/
+*.py[cod]
+.venv
+
+# Only .env.example is tracked
+*.env
 .env.*
 !.env.example
 
@@ -7,5 +11,6 @@
 bot_data.pickle
 log.log
 
-# Proposed custom config file
-custom_config.yaml
+# Only default config.yaml is tracked
+*config.yaml
+!config.yaml
