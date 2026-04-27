@@ -30,7 +30,7 @@ disconnected_msg: |
   No veo que tengas una solicitud de unión activa.
   https://t.me/osm_ar
 attachment_msg: "No puedo leer adjuntos :-("
-sent_msg: "Mensaje enviado al grupo de aprobación de ingresos."
+sent_msg: "(mensaje recibido)"
 expired_msg: |
   Tu solicitud de ingreso expiró porque no pudimos asegurarnos de que eres humano/a.
   Puedes solicitar unirte nuevamente si todavía lo deseas.
