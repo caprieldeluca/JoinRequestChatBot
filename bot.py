@@ -14,14 +14,6 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Bot,
-    Poll,
-    Audio,
-    VideoNote,
-    Venue,
-    Sticker,
-    Location,
-    Dice,
-    Contact,
 )
 from telegram.error import RetryAfter, Forbidden, BadRequest, ChatMigrated
 from telegram.ext import (
@@ -195,9 +187,7 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(
             chat_id=user_id,
-            text="Tu solicitud de ingreso expiró porque no pudimos asegurarnos de que eres humano/a. "
-            "Puedes solicitar unirte nuevamente si todavía lo deseas.",
-        )
+            text=config["expired_msg"])
     except Forbidden:
         # if somebody blocks me :(
         pass
@@ -238,7 +228,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # send welcome message
-    await context.bot.send_message(chat_id=update.effective_user.id, text=config["welcome_message"])
+    await context.bot.send_message(chat_id=update.effective_user.id, text=config["welcome_msg"])
 
     # this needs to be a get_chat, because has_private_forwards is only set here
     user = await context.bot.get_chat(chat_id=update.effective_user.id)
@@ -286,12 +276,18 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in context.bot_data["user_mentions"]:
         # We don't know this user.
-        await update.effective_message.reply_text("Hola :-)")
+        await update.effective_message.reply_text(
+            config["disconnected_msg"],
+            do_quote=True
+        )
         return
 
     elif update.effective_message.effective_attachment:
         # We don't allow attachments.
-        await update.effective_message.reply_text("No puedo leer adjuntos :-(")
+        await update.effective_message.reply_text(
+            config["attachment_msg"],
+            do_quote=True
+        )
         return
 
     else:
@@ -311,6 +307,11 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
 
         message = await context.bot.send_message(**kwargs)
         context.bot_data["messages_to_edit"][user_id].append(message.message_id)
+        # Reply to user with a "message sent" message.
+        await update.effective_message.reply_text(
+            config["sent_msg"],
+            do_quote=True
+        )
 
     # kick the deadline
     d = update_job(context.job_queue, user_id)
@@ -318,15 +319,17 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_message.text.startswith("!"):
+        # Message text starts with "!". Ignore.
+        return
+
     if not update.effective_message.reply_to_message.reply_markup:
         if update.effective_message.reply_to_message.from_user.id == context.bot.id:
             await update.effective_message.reply_text(
                 "Sorry, you either replied to the wrong message, "
                 "or this user has been dealt with already."
             )
-        return
-
-    if update.effective_message.text.startswith("!"):
         return
 
     # we get the user id from the old reply markup

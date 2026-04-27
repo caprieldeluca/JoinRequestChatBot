@@ -17,7 +17,7 @@ log_path: "log.log"
 expiration_minutes: 1440 # 1 day
 
 # Mensajes
-welcome_message: |
+welcome_msg: |
   Hola! Soy el bot que gestiona los ingresos en el grupo de OpenStreetMap Argentina. Antes de aceptar tu solicitud, por favor contame:
 
   👉 de dónde sos
@@ -26,3 +26,11 @@ welcome_message: |
 
   Es para asegurarme de que tenés un interés genuino en nuestra comunidad.
   Si no respondés en un día, rechazaré la solicitud (pero podés volver a pedir ingreso después). Gracias!
+disconnected_msg: |
+  No veo que tengas una solicitud de unión activa.
+  https://t.me/osm_ar
+attachment_msg: "No puedo leer adjuntos :-("
+sent_msg: "Mensaje enviado al grupo de aprobación de ingresos."
+expired_msg: |
+  Tu solicitud de ingreso expiró porque no pudimos asegurarnos de que eres humano/a.
+  Puedes solicitar unirte nuevamente si todavía lo deseas.
