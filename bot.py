@@ -184,32 +184,39 @@ def update_job(job_queue: JobQueue, job_name: int):
 
 async def reject_job(context: ContextTypes.DEFAULT_TYPE):
     user_id = context.job.user_id
+
+    decline_success = False
     try:
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=config["expired_msg"])
+        await context.bot.decline_chat_join_request(
+            chat_id=config['main_group_id'],
+            user_id=user_id
+        )
+        decline_success = True
     except Forbidden:
-        # if somebody blocks me :(
+        # The account got deleted.
         pass
     except BadRequest as e:
-        if e.message == "Chat not found":
-            # the account got deleted. I think.
-            pass
-        else:
-            raise
-
-    try:
-        await context.bot.decline_chat_join_request(chat_id=config['main_group_id'], user_id=user_id)
-    except BadRequest as e:
         if e.message == "Hide_requester_missing":
-            # seems that someone already took care of that join request
+            # Join request not found in main group.
             pass
         else:
             raise
 
+    # Don't send message if decline failed
+    if decline_success:
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=config["expired_msg"]
+            )
+        except Forbidden:
+            # If somebody blocks me.
+            pass
+
+    # If Key Error, user was already finished.
+    # Manually check the pickle and remove their messages in approve group.
     await finish_user(
         context,
-        # this gave me a key error a couple times for a user which got rejected. Not sure why. cant reproduce
         "Join request of " + context.bot_data["user_mentions"][user_id] + " expired.",
         config["approve_group_id"],
         user_id,
@@ -228,7 +235,12 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # send welcome message
-    await context.bot.send_message(chat_id=update.effective_user.id, text=config["welcome_msg"])
+    try:
+        await context.bot.send_message(chat_id=update.effective_user.id, text=config["welcome_msg"])
+    except Forbidden:
+        # The user blocked me but sent a join request.
+        # TODO: Inform it in approve chat.
+        pass
 
     # this needs to be a get_chat, because has_private_forwards is only set here
     user = await context.bot.get_chat(chat_id=update.effective_user.id)
@@ -420,6 +432,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # this can happen after a restart. No need to worry about this.
         pass
 
+    # If Key Error, user was already finished.
+    # Manually check the pickle and remove their messages in approve group.
     await finish_user(
         context,
         text,
@@ -446,14 +460,12 @@ async def finish_user(
     context.application.create_task(
         edit_buttons(context.bot, context.bot_data["messages_to_edit"][user_id]), update
     )
-    try:
-        del context.bot_data["messages_to_edit"][user_id]
-        del context.bot_data["last_message_to_user"][user_id]
-        del context.bot_data["user_mentions"][user_id]
-        del context.bot_data["user_expiration"][user_id]
-    except KeyError:
-        # this can happen in a race condition.
-        pass
+
+    # Clean bot_data.
+    context.bot_data["messages_to_edit"].pop(user_id, None)
+    context.bot_data["last_message_to_user"].pop(user_id, None)
+    context.bot_data["user_mentions"].pop(user_id, None)
+    context.bot_data["user_expiration"].pop(user_id, None)
 
 
 async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
