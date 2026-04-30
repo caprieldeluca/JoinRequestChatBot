@@ -484,30 +484,23 @@ async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
         await asyncio.sleep(1)
 
 
-async def first_run_check(ready_application: Application):
+async def first_run_check(application: Application):
     """
-    Initializes necessary data structure for the application.
+    Do last things before start to run.
 
-    Params:
-        ready_application: The state of the built application, after load
-            persistence and before attaching handlers.
-
-    Returns:
-        None, but modifies `application` state just before `run_polling`.
+    Updates bot_data. Schedules reject_jobs.
     """
+    b_d = application.bot_data
+
     # Create empty bot_data items if there are not previous ones.
-    if "messages_to_edit" not in ready_application.bot_data:
-        application.bot_data["messages_to_edit"] = {}
-    if "user_mentions" not in ready_application.bot_data:
-        application.bot_data["user_mentions"] = {}
-    if "last_message_to_user" not in ready_application.bot_data:
-        application.bot_data["last_message_to_user"] = {}
-    if "user_expiration" not in ready_application.bot_data:
-        application.bot_data["user_expiration"] = {}
+    b_d.setdefault("messages_to_edit", {})
+    b_d.setdefault("user_mentions", {})
+    b_d.setdefault("last_message_to_user", {})
+    b_d.setdefault("user_expiration", {})
 
     # Restore scheduled reject jobs.
-    i = 0 # Count expired
-    for key, value in ready_application.bot_data["user_expiration"].items():
+    i = 0 # Expired index.
+    for key, value in b_d["user_expiration"].items():
         user_id = key
         d = datetime.datetime.fromisoformat(value)
         now = datetime.datetime.now(datetime.UTC)
