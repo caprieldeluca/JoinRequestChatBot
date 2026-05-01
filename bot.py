@@ -14,6 +14,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Bot,
+    ReplyParameters,
 )
 from telegram.error import RetryAfter, Forbidden, BadRequest, ChatMigrated
 from telegram.ext import (
@@ -160,25 +161,33 @@ def create_buttons(user_id: int):
     return buttons
 
 
-def update_job(job_queue: JobQueue, job_name: int):
+def update_job(job_queue: JobQueue, job_name: str):
     """
-    Changes the date trigger of a scheduled job.
+    Updates the datetime trigger of a scheduled job.
 
     Params:
         job_queue: The queue of scheduled jobs.
-        job_name: Name of the job to update. It is the related user_id.
+        job_name: Name of the job to update. It is str(user_id).
 
     Returns:
         datetime.datetime: UTC datetime of the updated job trigger.
     """
-    try:
-        job = job_queue.get_jobs_by_name(str(job_name))[0]
-    except IndexError:
-        # this can happen after a restart. No need to worry about this.
-        return
-
+    # Updates datetime to `expiration_minutes` from now
     d = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=config["expiration_minutes"])
-    job.job.reschedule("date", run_date=d)
+
+    try:
+        job = job_queue.get_jobs_by_name(job_name)[0]
+        job.job.reschedule("date", run_date=d)
+    except IndexError:
+        # No previous job for that name. Create one.
+        # TODO: Inform dev_chat.
+        job_queue.run_once(
+            reject_job,
+            when=d,
+            user_id=int(job_name),
+            name=job_name
+        )
+
     return d
 
 
@@ -202,7 +211,7 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
         else:
             raise
 
-    # Don't send message if decline failed
+    # Don't send message to user chat if decline failed.
     if decline_success:
         try:
             await context.bot.send_message(
@@ -211,16 +220,27 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
             )
         except Forbidden:
             # If somebody blocks me.
+            # TODO: Inform dev_chat.
             pass
 
-    # If Key Error, user was already finished.
-    # Manually check the pickle and remove their messages in approve group.
+    # Finish the user.
+    message_id = None
+    mention = str(user_id)
+    try:
+        message_id = context.bot_data["last_message_to_user"][user_id]
+        mention = context.bot_data["user_mentions"][user_id]
+    except KeyError:
+        # Persistence failed.
+        # TODO: Inform dev_chat.
+        pass
+
+    text = f"{mention}, User join request expired"
     await finish_user(
         context,
-        "Join request of " + context.bot_data["user_mentions"][user_id] + " expired.",
+        text,
         config["approve_group_id"],
         user_id,
-        context.bot_data["last_message_to_user"][user_id],
+        message_id,
     )
 
 
@@ -287,6 +307,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in context.bot_data["user_mentions"]:
+        # TODO: Check if user is in main_group join requests list.
         # We don't know this user.
         await update.effective_message.reply_text(
             config["disconnected_msg"],
@@ -325,8 +346,8 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
             do_quote=True
         )
 
-    # kick the deadline
-    d = update_job(context.job_queue, user_id)
+    # Kick the deadline.
+    d = update_job(context.job_queue, str(user_id))
     context.bot_data["user_expiration"][user_id] = str(d)
 
 
@@ -350,6 +371,7 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
     if user_id not in context.bot_data["user_mentions"]:
+        # TODO: Check if user is in main_group join requests list.
         await update.effective_message.reply_text(
             "Sorry, this user has been dealt with already."
         )
@@ -376,14 +398,17 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=create_buttons(user_id),
     )
     context.bot_data["messages_to_edit"][user_id].append(send_message.message_id)
-    # Kick the deadline. Note than update_job returns the new datetime object.
-    d = update_job(context.job_queue, user_id)
+
+    # Kick the deadline.
+    d = update_job(context.job_queue, str(user_id))
     context.bot_data["user_expiration"][user_id] = str(d)
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Called when a user press a keyboard markup button on a bot message.
+    Called when a reviewer press a keyboard markup button on a bot message.
+
+    Currently doesn't inform to the user chat about the review.
     """
     message_id = update.callback_query.message.message_id
     data = update.callback_query.data.split("_") # '[y|n]_' + str(user_id)
@@ -423,13 +448,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except BadRequest as e:
                 if e.message == "Participant_id_invalid":
-                    # User is not a maingroup participant.
-                    # TODO: Api Error? Inform devchat.
+                    # User is not a main_group participant.
+                    # TODO: Api Error? Inform dev_chat.
                     pass
             text = f"{reviewer_mention}, User banned."
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
-            # User is not in maingroup join requests list.
+            # User is not in main_group join requests list.
             # Check bot_data. Update with this message if persistence failed.
             if user_id not in context.bot_data["messages_to_edit"]:
                 context.bot_data["messages_to_edit"][user_id] = [message_id]
@@ -442,36 +467,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             raise
     except Forbidden:
-        # Not an accesible user.
-        text = f"{reviewer_mention}, User was forbidden."
+        # The account got deleted.
+        text = f"{reviewer_mention}, {str(user_id)}, User was forbidden."
 
     # Remove reject job.
     try:
         context.job_queue.get_jobs_by_name(str(user_id))[0].schedule_removal()
     except IndexError:
         # No job for the user. Persistence failed.
-        # TODO: Inform devchat.
+        # TODO: Inform dev_chat.
         pass
 
     # Finish the user
-    try:
-        await finish_user(
-            context,
-            text,
-            approve_group_id,
-            user_id,
-            message_id,
-            update,
-        )
-    except KeyError:
-        # Active user but not found in bot_data.
-        # Remove the markup keyboard of this message.
-        # TODO: Inform devchat.
-        await context.bot.edit_message_reply_markup(
-            chat_id=approve_group_id,
-            message_id=message_id,
-            reply_markup=None
-        )
+    await finish_user(
+        context,
+        text,
+        approve_group_id,
+        user_id,
+        message_id,
+        update,
+    )
 
 
 async def finish_user(
@@ -482,35 +497,60 @@ async def finish_user(
     message_id: int = None,
     update: Update = None,
 ):
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=text,
-        reply_to_message_id=message_id,
-    )
+    """
+    Deactivates the user.
+
+    Sends a message to `approve_chat`, `message_id` will be replied.
+    Remove buttons from bot messages keyboard markup.
+    Cleans bot_data.
+    """
+    # TODO: Reply to the same topic id than last message.
+    msg_kwargs = {
+        "chat_id": chat_id,
+        "text": text,
+    }
+
+    if message_id is not None:
+        msg_kwargs["reply_parameters"] = ReplyParameters(message_id)
+
+    # Send message to approve chat.
+    await context.bot.send_message(**msg_kwargs)
+
+    # Remove messages markup.
+    messages_to_edit = context.bot_data["messages_to_edit"].setdefault(user_id, [message_id])
     context.application.create_task(
-        edit_buttons(context.bot, context.bot_data["messages_to_edit"][user_id]), update
+        edit_buttons(context.bot, messages_to_edit), update
     )
 
-    # Clean bot_data.
+    # Clean persistence.
     context.bot_data["messages_to_edit"].pop(user_id, None)
     context.bot_data["last_message_to_user"].pop(user_id, None)
     context.bot_data["user_mentions"].pop(user_id, None)
     context.bot_data["user_expiration"].pop(user_id, None)
 
+    context.application.drop_chat_data(user_id)
+    context.application.drop_user_data(user_id)
+
 
 async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
-    # every second we edit out a button. We wait this long, so we don't rate limit the bot
-    # instead of reversed here, I should have done prepend instead of append I guess
+    """Removes buttons in (a list of) messages markup."""
+    # Last messages first.
     for message_id in reversed(messages_to_edit):
         try:
             await bot.edit_message_reply_markup(
-                chat_id=config["approve_group_id"], message_id=message_id, reply_markup=None
+                chat_id=config["approve_group_id"],
+                message_id=message_id,
+                reply_markup=None,
             )
         except RetryAfter as e:
+            # Avoid rate limit.
             await asyncio.sleep(e.retry_after)
             await bot.edit_message_reply_markup(
-                chat_id=config["approve_group_id"], message_id=message_id, reply_markup=None
+                chat_id=config["approve_group_id"],
+                message_id=message_id,
+                reply_markup=None,
             )
+        # Edit one message per second.
         await asyncio.sleep(1)
 
 
@@ -545,6 +585,9 @@ async def first_run_check(application: Application):
             user_id=user_id,
             name=str(user_id)
         )
+
+    # TODO: Check main_group join requests list to update bot_data.
+
 
 
 if __name__ == "__main__":
