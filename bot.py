@@ -306,8 +306,9 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles private chat messages."""
+    # NOTE: We can't check if user is currently in main_group join requests list.
     if update.effective_user.id not in context.bot_data["user_mentions"]:
-        # TODO: Check if user is in main_group join requests list.
         # We don't know this user.
         await update.effective_message.reply_text(
             config["disconnected_msg"],
@@ -324,6 +325,7 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     else:
+        # Send a message to approve_group.
         user_id = update.effective_user.id
         user_mention = context.bot_data["user_mentions"][user_id]
 
@@ -340,11 +342,13 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
 
         message = await context.bot.send_message(**kwargs)
         context.bot_data["messages_to_edit"][user_id].append(message.message_id)
-        # Reply to user with a "message sent" message.
-        await update.effective_message.reply_text(
-            config["sent_msg"],
-            do_quote=True
-        )
+
+        # Optionally reply to user with a "message sent" message.
+        if config["sent_msg"]:
+            await update.effective_message.reply_text(
+                config["sent_msg"],
+                do_quote=True
+            )
 
     # Kick the deadline.
     d = update_job(context.job_queue, str(user_id))
@@ -352,6 +356,7 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles approve group messages."""
 
     if update.effective_message.text.startswith("!"):
         # Message text starts with "!". Ignore.
@@ -365,13 +370,13 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
         return
 
-    # we get the user id from the old reply markup
+    # We get the user id from the old reply markup.
     user_id = int(
         update.effective_message.reply_to_message.reply_markup.inline_keyboard[0][0].callback_data.split("_")[1]
     )
 
+    # NOTE: We can't check if user is currently in main_group join requests list.
     if user_id not in context.bot_data["user_mentions"]:
-        # TODO: Check if user is in main_group join requests list.
         await update.effective_message.reply_text(
             "Sorry, this user has been dealt with already."
         )
@@ -562,13 +567,16 @@ async def first_run_check(application: Application):
     """
     b_d = application.bot_data
 
+    # TODO: Load config in bot_data.
+
     # Create empty bot_data items if there are not previous ones.
     b_d.setdefault("messages_to_edit", {})
     b_d.setdefault("user_mentions", {})
     b_d.setdefault("last_message_to_user", {})
     b_d.setdefault("user_expiration", {})
 
-    # Restore scheduled reject jobs.
+    # Restore scheduled reject jobs from persistent data.
+    # NOTE: We can't get a list of current main_group join requests.
     i = 0 # Expired index.
     for key, value in b_d["user_expiration"].items():
         user_id = key
@@ -586,7 +594,7 @@ async def first_run_check(application: Application):
             name=str(user_id)
         )
 
-    # TODO: Check main_group join requests list to update bot_data.
+
 
 
 
