@@ -6,8 +6,8 @@ dev_chat_id: 0
 main_group_id: 0
 approve_group_id: 0
 ## Topics (optional, used if truthy values are defined)
-requests_appr_tid: 0 # Join requests messages.
-responses_appr_tid: 0 # Responses to bot messages.
+requests_appr_tid: 0 # Join requests messages topic in approve group.
+responses_appr_tid: 0 # Responses to bot messages topic in approve group.
 
 # Paths
 state_path: "bot_data.pickle"
@@ -16,9 +16,11 @@ log_path: "log.log"
 # Options
 expiration_minutes: 1440 # 1 day
 
-# Mensajes
+# Messages
+## To private chat
 welcome_msg: |
-  Hola! Soy el bot que gestiona los ingresos en el grupo de OpenStreetMap Argentina. Antes de aceptar tu solicitud, por favor contame:
+  Hola! Soy el bot que gestiona los ingresos en el grupo de OpenStreetMap Argentina.
+  Antes de aceptar tu solicitud, por favor contame:
 
   👉 de dónde sos
   👉 cómo conociste el grupo
@@ -26,11 +28,20 @@ welcome_msg: |
 
   Es para asegurarme de que tenés un interés genuino en nuestra comunidad.
   Si no respondés en un día, rechazaré la solicitud (pero podés volver a pedir ingreso después). Gracias!
-disconnected_msg: |
-  No veo que tengas una solicitud de unión activa.
-  https://t.me/osm_ar
-attachment_msg: "No puedo leer adjuntos :-("
-sent_msg: "(mensaje recibido)"
 expired_msg: |
   Tu solicitud de ingreso expiró porque no pudimos asegurarnos de que eres humano/a.
   Puedes solicitar unirte nuevamente si todavía lo deseas.
+  https://t.me/osm_ar
+disconnected_reply_msg: |
+  En mis registros no encuentro que tengas una solicitud de unión activa.
+  https://t.me/osm_ar
+attachment_reply_msg: "I can't read attachments :-("
+ack_reply_msg: "" # Optional aknowledgment reply.
+## To approve group
+approve_bttn_msg: "✅"
+decline_bttn_msg: "❌"
+ban_bttn_msg: "🛑"
+received_msg: "message received."
+sent_msg: "message sent."
+## To main group
+relay_msg: "" # Optional relay of approved message in main group.

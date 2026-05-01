@@ -149,13 +149,25 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 def create_buttons(user_id: int):
+    """Creates keyboard markup buttons with *callback_data*."""
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Aceptar", callback_data=f"y_{user_id}"),
-                InlineKeyboardButton("❌ Rechazar", callback_data=f"n_{user_id}"),
+                InlineKeyboardButton(
+                    config["approve_bttn_msg"],
+                    callback_data=f"y_{user_id}",
+                ),
+                InlineKeyboardButton(
+                    config["decline_bttn_msg"],
+                    callback_data=f"n_{user_id}",
+                ),
             ],
-            [InlineKeyboardButton("🛑 Banear", callback_data=f"b_{user_id}")],
+            [
+                InlineKeyboardButton(
+                    config["ban_bttn_msg"],
+                    callback_data=f"b_{user_id}",
+                ),
+            ],
         ]
     )
     return buttons
@@ -173,7 +185,8 @@ def update_job(job_queue: JobQueue, job_name: str):
         datetime.datetime: UTC datetime of the updated job trigger.
     """
     # Updates datetime to `expiration_minutes` from now
-    d = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=config["expiration_minutes"])
+    delta = datetime.timedelta(minutes=config["expiration_minutes"])
+    d = datetime.datetime.now(datetime.UTC) + delta
 
     try:
         job = job_queue.get_jobs_by_name(job_name)[0]
@@ -203,10 +216,12 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
         decline_success = True
     except Forbidden:
         # The account got deleted.
+        # TODO: Inform dev_chat.
         pass
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
             # Join request not found in main group.
+            # TODO: Inform dev_chat.
             pass
         else:
             raise
@@ -234,7 +249,7 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
         # TODO: Inform dev_chat.
         pass
 
-    text = f"{mention}, User join request expired"
+    text = f"{mention}, join request expired"
     await finish_user(
         context,
         text,
@@ -266,7 +281,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await context.bot.get_chat(chat_id=update.effective_user.id)
 
     if user.has_private_forwards and not user.username:
-        message = f"The user {user.full_name} has sent a join request, but can not be mentioned :(."
+        message = f"{user.full_name} has sent a join request, but can not be mentioned :("
         context.bot_data["user_mentions"][user.id] = user.full_name
     else:
         if user.username:
@@ -274,7 +289,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             mention = f'<a href="tg://user?id={user.id}">{user.full_name}</a>'
 
-        message = f"The user {mention} has sent a join request \\o/"
+        message = f"{mention} has sent a join request o/"
         context.bot_data["user_mentions"][user.id] = mention
 
     # Define (keyword) args to send message.
@@ -295,7 +310,8 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.bot_data["messages_to_edit"][user.id] = [send_message.message_id]
         context.bot_data["last_message_to_user"][user.id] = send_message.message_id
 
-    d = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=config["expiration_minutes"])
+    delta = datetime.timedelta(minutes=config["expiration_minutes"])
+    d = datetime.datetime.now(datetime.UTC) + delta
     context.job_queue.run_once(
         reject_job,
         when=d,
@@ -311,7 +327,7 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
     if update.effective_user.id not in context.bot_data["user_mentions"]:
         # We don't know this user.
         await update.effective_message.reply_text(
-            config["disconnected_msg"],
+            config["disconnected_reply_msg"],
             do_quote=True
         )
         return
@@ -329,10 +345,11 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
         user_id = update.effective_user.id
         user_mention = context.bot_data["user_mentions"][user_id]
 
-        # Define (keyword) args to send message.
+        # Define (keyword) args to send message to approve group.
+        user_msg = update.effective_message.text_html_urled
         kwargs = {
             "chat_id": config["approve_group_id"],
-            "text": f"{update.effective_message.text_html_urled}\n\nThis message was sent by {user_mention}",
+            "text": f"{user_msg}\n\n{user_mention}, {config["received_msg"]}",
             "reply_to_message_id": context.bot_data["last_message_to_user"][user_id],
             "reply_markup": create_buttons(user_id)
         }
@@ -342,11 +359,12 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
 
         message = await context.bot.send_message(**kwargs)
         context.bot_data["messages_to_edit"][user_id].append(message.message_id)
+        context.bot_data["last_message_to_user"][user_id] = message.message_id
 
-        # Optionally reply to user with a "message sent" message.
-        if config["sent_msg"]:
+        # Optionally reply to user with a message of acknowledgment.
+        if config["ack_reply_msg"]:
             await update.effective_message.reply_text(
-                config["sent_msg"],
+                config["ack_reply_msg"],
                 do_quote=True
             )
 
@@ -399,7 +417,7 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.bot_data["messages_to_edit"][user_id].append(message.message_id)
         return
     send_message = await update.effective_message.reply_text(
-        f"Message sent to {context.bot_data['user_mentions'][user_id]}",
+        f"{context.bot_data['user_mentions'][user_id]}, {config["sent_msg"]}",
         reply_markup=create_buttons(user_id),
     )
     context.bot_data["messages_to_edit"][user_id].append(send_message.message_id)
@@ -416,8 +434,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Currently doesn't inform to the user chat about the review.
     """
     message_id = update.callback_query.message.message_id
-    data = update.callback_query.data.split("_") # '[y|n]_' + str(user_id)
+    data = update.callback_query.data.split("_") # '[y|n|b]_' + str(user_id)
     user_id = int(data[1])
+    user_mention = context.bot_data["user_mentions"].setdefault(user_id, str(user_id))
     reviewer_mention = update.effective_user.mention_html()
     main_group_id = int(config["main_group_id"])
     approve_group_id = update.effective_chat.id
@@ -431,14 +450,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=main_group_id,
                 user_id=user_id,
             )
-            text = f"{reviewer_mention}, Join request approved."
+            # Optionally send a relay message to main group.
+            if config["relay_msg"]:
+                approved_msg = update.callback_query.message.text_html_urled
+                kwargs = {
+                    "chat_id": config["main_group_id"],
+                    "text": f"{approved_msg}\n{config["relay_msg"]}",
+                }
+                await context.bot.send_message(**kwargs)
+
+            text = f"{reviewer_mention}, join request approved."
 
         elif data[0] == "n": # Decline.
             await context.bot.decline_chat_join_request(
                 chat_id=main_group_id,
                 user_id=user_id,
             )
-            text = f"{reviewer_mention}, Join request declined."
+            text = f"{reviewer_mention}, join request declined."
         else: # Ban.
             try:
                 await context.bot.ban_chat_member(
@@ -456,7 +484,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # User is not a main_group participant.
                     # TODO: Api Error? Inform dev_chat.
                     pass
-            text = f"{reviewer_mention}, User banned."
+            text = f"{reviewer_mention}, user banned."
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
             # User is not in main_group join requests list.
@@ -467,13 +495,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.bot_data["messages_to_edit"][user_id].append(message_id)
             text = (
                 f"{reviewer_mention}, "
-                f"The join request was already handled by someone else :("
+                f"the join request was already handled by someone else :("
             )
         else:
             raise
     except Forbidden:
         # The account got deleted.
-        text = f"{reviewer_mention}, {str(user_id)}, User was forbidden."
+        text = f"{reviewer_mention}, {user_mention}, user account got deleted."
 
     # Remove reject job.
     try:
@@ -509,7 +537,6 @@ async def finish_user(
     Remove buttons from bot messages keyboard markup.
     Cleans bot_data.
     """
-    # TODO: Reply to the same topic id than last message.
     msg_kwargs = {
         "chat_id": chat_id,
         "text": text,

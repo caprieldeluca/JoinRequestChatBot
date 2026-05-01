@@ -7,6 +7,7 @@
 - Custom configuration variables are optional and override defaults.
 - Send messages to topics is optional.
 - Responses to bot can be sent to a different (than join requests) topic.
+- Optionally relay approved message to main group.
 
 ### Changed
 - Default configuration (mandatory) path is resolved at runtime (to the same directory as bot.py).
