@@ -382,66 +382,96 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    data = update.callback_query.data.split("_")
+    """
+    Called when a user press a keyboard markup button on a bot message.
+    """
+    message_id = update.callback_query.message.message_id
+    data = update.callback_query.data.split("_") # '[y|n]_' + str(user_id)
     user_id = int(data[1])
+    reviewer_mention = update.effective_user.mention_html()
+    main_group_id = int(config["main_group_id"])
+    approve_group_id = update.effective_chat.id
+    dev_chat_id = int(config["dev_chat_id"])
+
+    # Execute and define the text to finish user.
+    # await update.callback_query.answer()
     try:
-        if data[0] == "y":
-            try:
-                await context.bot.approve_chat_join_request(chat_id=config["main_group_id"], user_id=user_id)
-            except Forbidden:
-                # telegram disabled the account
-                pass
+        if data[0] == "y": # Approve.
+            await context.bot.approve_chat_join_request(
+                chat_id=main_group_id,
+                user_id=user_id,
+            )
+            text = f"{reviewer_mention}, Join request approved."
 
-            text = f"{update.effective_user.mention_html()} accepted the join request."
-        elif data[0] == "n":
+        elif data[0] == "n": # Decline.
+            await context.bot.decline_chat_join_request(
+                chat_id=main_group_id,
+                user_id=user_id,
+            )
+            text = f"{reviewer_mention}, Join request declined."
+        else: # Ban.
             try:
-                await context.bot.decline_chat_join_request(chat_id=config["main_group_id"], user_id=user_id)
-            except Forbidden:
-                pass
-
-            text = f"{update.effective_user.mention_html()} rejected the join request."
-        else:
-            try:
-                await context.bot.ban_chat_member(chat_id=config["main_group_id"], user_id=user_id)
-                await context.bot.decline_chat_join_request(chat_id=config["main_group_id"], user_id=user_id)
+                await context.bot.ban_chat_member(
+                    chat_id=main_group_id,
+                    user_id=user_id
+                )
+                # Make sure to decline.
+                # Doesn't seem to care if join request was already handled.
+                await context.bot.decline_chat_join_request(
+                    chat_id=main_group_id,
+                    user_id=user_id
+                )
             except BadRequest as e:
                 if e.message == "Participant_id_invalid":
-                    # telegram was quicker and they banned the account
+                    # User is not a maingroup participant.
+                    # TODO: Api Error? Inform devchat.
                     pass
-            except Forbidden:
-                pass
-
-            text = f"{update.effective_user.mention_html()} banned the join request."
+            text = f"{reviewer_mention}, User banned."
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
-            text = (
-                f"Sorry {update.effective_user.mention_html()}, "
-                f"but the join request was already handled by someone else :("
-            )
-            message_id = update.callback_query.message.message_id
+            # User is not in maingroup join requests list.
+            # Check bot_data. Update with this message if persistence failed.
             if user_id not in context.bot_data["messages_to_edit"]:
                 context.bot_data["messages_to_edit"][user_id] = [message_id]
             elif message_id not in context.bot_data["messages_to_edit"][user_id]:
                 context.bot_data["messages_to_edit"][user_id].append(message_id)
+            text = (
+                f"{reviewer_mention}, "
+                f"The join request was already handled by someone else :("
+            )
         else:
             raise
+    except Forbidden:
+        # Not an accesible user.
+        text = f"{reviewer_mention}, User was forbidden."
+
+    # Remove reject job.
     try:
         context.job_queue.get_jobs_by_name(str(user_id))[0].schedule_removal()
     except IndexError:
-        # this can happen after a restart. No need to worry about this.
+        # No job for the user. Persistence failed.
+        # TODO: Inform devchat.
         pass
 
-    # If Key Error, user was already finished.
-    # Manually check the pickle and remove their messages in approve group.
-    await finish_user(
-        context,
-        text,
-        update.effective_chat.id,
-        user_id,
-        update.callback_query.message.message_id,
-        update,
-    )
+    # Finish the user
+    try:
+        await finish_user(
+            context,
+            text,
+            approve_group_id,
+            user_id,
+            message_id,
+            update,
+        )
+    except KeyError:
+        # Active user but not found in bot_data.
+        # Remove the markup keyboard of this message.
+        # TODO: Inform devchat.
+        await context.bot.edit_message_reply_markup(
+            chat_id=approve_group_id,
+            message_id=message_id,
+            reply_markup=None
+        )
 
 
 async def finish_user(
