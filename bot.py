@@ -30,6 +30,7 @@ from telegram.ext import (
     Application,
     JobQueue,
 )
+from telegram.helpers import mention_html
 from typing import List
 
 logger = logging.getLogger(__name__)
@@ -294,17 +295,9 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # this needs to be a get_chat, because has_private_forwards is only set here
     user = await context.bot.get_chat(chat_id=update.effective_user.id)
 
-    if user.has_private_forwards and not user.username:
-        message = f"{user.full_name} has sent a join request, but can not be mentioned :("
-        context.bot_data["user_mentions"][user.id] = user.full_name
-    else:
-        if user.username:
-            mention = f"@{user.username}"
-        else:
-            mention = f'<a href="tg://user?id={user.id}">{user.full_name}</a>'
-
-        message = f"{mention} has sent a join request o/"
-        context.bot_data["user_mentions"][user.id] = mention
+    mention = mention_html(user.id, user.first_name)
+    message = f"{mention} has sent a join request o/"
+    context.bot_data["user_mentions"][user.id] = mention
 
     # Define (keyword) args to send message.
     kwargs = {
