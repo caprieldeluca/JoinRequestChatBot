@@ -136,19 +136,30 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     update_str = update.to_dict() if isinstance(update, Update) else str(update)
     message = (
         f"An exception was raised while handling an update\n"
-        f"<pre>update = {html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}"
-        "</pre>\n\n"
-        f"<pre>context.chat_data = {html.escape(str(context.chat_data))}</pre>\n\n"
-        f"<pre>context.user_data = {html.escape(str(context.user_data))}</pre>\n\n"
-        f"<pre>{html.escape(tb_string)}</pre>"
+        f"update = {html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}\n\n"
+        f"context.chat_data = {html.escape(str(context.chat_data))}\n\n"
+        f"context.user_data = {html.escape(str(context.user_data))}\n\n"
+        f"{html.escape(tb_string)}"
     )
 
     # Avoid BadRequest: Message is too long
-    maxlen = 4096
-    for i in range(0, len(mesage), maxlen):
-        message = message[i:i + maxlen]
+    escaped_msg = html.escape(message)
+    maxlen = 4085
+    for i, offset in enumerate(range(0, len(message), maxlen)):
+        if i == 2:
+            await context.bot.send_message(
+                chat_id=config["dev_chat_id"],
+                text="More in the logs..."
+            )
+            break
+
+        chunk = message[offset:offset + maxlen]
+        formatted_chunk = f"<pre>{chunk}</pre>"
         # Finally, send the message
-        await context.bot.send_message(chat_id=config["dev_chat_id"], text=message)
+        await context.bot.send_message(
+            chat_id=config["dev_chat_id"],
+            text=formatted_chunk,
+        )
 
 
 def create_buttons(user_id: int):

@@ -20,6 +20,7 @@
 - Ignored ("!") from approve group message checks first.
 - Reject job logic in edge cases.
 - Bot data cleanup at finish user.
+- Too long messages to dev chat.
 
 ---
 
