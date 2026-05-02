@@ -8,6 +8,7 @@ approve_group_id: 0
 ## Topics (optional, used if truthy values are defined)
 requests_appr_tid: 0 # Join requests messages topic in approve group.
 responses_appr_tid: 0 # Responses to bot messages topic in approve group.
+relay_main_tid: 0 # Relay (if defined, see below) topic id in main group.
 
 # Paths
 state_path: "bot_data.pickle"

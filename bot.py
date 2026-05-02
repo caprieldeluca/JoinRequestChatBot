@@ -133,7 +133,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     tb_string = "".join(tb_list)
 
     # Build the message with some markup and additional information about what happened.
-    # You might need to add some logic to deal with messages longer than the 4096 character limit.
     update_str = update.to_dict() if isinstance(update, Update) else str(update)
     message = (
         f"An exception was raised while handling an update\n"
@@ -144,8 +143,12 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         f"<pre>{html.escape(tb_string)}</pre>"
     )
 
-    # Finally, send the message
-    await context.bot.send_message(chat_id=config["dev_chat_id"], text=message)
+    # Avoid BadRequest: Message is too long
+    maxlen = 4096
+    for i in range(0, len(mesage), maxlen):
+        message = message[i:i + maxlen]
+        # Finally, send the message
+        await context.bot.send_message(chat_id=config["dev_chat_id"], text=message)
 
 
 def create_buttons(user_id: int):
@@ -457,6 +460,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "chat_id": config["main_group_id"],
                     "text": f"{approved_msg}\n{config["relay_msg"]}",
                 }
+                # Optionally to a main group topic.
+                if config["relay_main_tid"]:
+                    kwargs["message_thread_id"] = config["relay_main_tid"]
+
                 await context.bot.send_message(**kwargs)
 
             text = f"{reviewer_mention}, join request approved."
