@@ -161,30 +161,6 @@ def load_configs(env_token: str, env_custom_config: str) -> tuple[str, dict]:
     return token, config
 
 
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Log the error and send a telegram message to notify the developer."""
-    # Log the error before we do anything else, so we can see it even if something breaks.
-    logger.error(msg="Exception while handling an update:", exc_info=context.error)
-
-    # traceback.format_exception returns the usual python message about an exception, but as a
-    # list of strings rather than a single string, so we have to join them together.
-    tb_list = traceback.format_exception(
-        None, context.error, context.error.__traceback__
-    )
-    tb_string = "".join(tb_list)
-
-    # Build the message with some markup and additional information about what happened.
-    update_str = update.to_dict() if isinstance(update, Update) else str(update)
-    message = (
-        f"An exception was raised while handling an update\n"
-        f"update = {html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}\n\n"
-        f"context.chat_data = {html.escape(str(context.chat_data))}\n\n"
-        f"context.user_data = {html.escape(str(context.user_data))}\n\n"
-        f"{html.escape(tb_string)}"
-    )
-    await message_to_dev(message, context)
-
-
 async def message_to_dev(message: str, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Sends a message to dev_chat.
@@ -212,6 +188,36 @@ async def message_to_dev(message: str, context: ContextTypes.DEFAULT_TYPE) -> No
             chat_id=config["dev_chat_id"],
             text=formatted_chunk,
         )
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Logs any unhandled error in the bot.
+
+    Callback function of `application.add_error_handlerLog`.
+    Log the error and send a message to `dev_chat`.
+    """
+    # Log the error before we do anything else, so we can see it even if something breaks.
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
+    # `traceback.format_exception` returns the usual python message about an exception.
+    # As a list of strings. Join them together.
+    tb_list = traceback.format_exception(
+        None, context.error, context.error.__traceback__
+    )
+    tb_string = "".join(tb_list)
+
+    # Build the message with some markup and additional information about what happened.
+    update_str = update.to_dict() if isinstance(update, Update) else str(update)
+    message = (
+        f"An exception was raised while handling an update\n"
+        f"update = {html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}\n\n"
+        f"context.chat_data = {html.escape(str(context.chat_data))}\n\n"
+        f"context.user_data = {html.escape(str(context.user_data))}\n\n"
+        f"{html.escape(tb_string)}"
+    )
+    # Send to `dev_chat`.
+    await message_to_dev(message, context)
 
 
 def create_buttons(user_id: int):
