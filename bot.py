@@ -34,26 +34,61 @@ from telegram.helpers import mention_html
 from typing import List
 
 logger = logging.getLogger(__name__)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
+logging.getLogger('apscheduler').setLevel(logging.WARNING)
 
-# Environment variable names.
+# Environment variables names.
 ENV_TOKEN = "TOKEN"
-ENV_CUSTOM_CONFIG = "CUSTOM_CONFIG_PATH" # Optional.
+ENV_CUSTOM_CONFIG = "CUSTOM_CONFIG_PATH"
 
 # Hardcoded (next to this file) default config path (required).
 DEFAULT_CONFIG = Path(__file__).resolve().parent / "config.yaml"
 
-def load_configs():
+
+def setup_logging(log_path: str | None = None, level: int = logging.INFO) -> None:
+    """
+    Configures logging system.
+
+    A minimal console-handler logger can be configured to startup.
+    If `log_path` is provided, a file-handler is also configured.
+    """
+    formatter = logging.Formatter(
+        fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    # Console handler.
+    if not root_logger.handlers:
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setLevel(logging.WARNING)
+        console_handler.setFormatter(formatter)
+        root_logger.addHandler(console_handler)
+
+    # File handler.
+    if log_path:
+        file_handler = logging.FileHandler(log_path, encoding="utf-8")
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
+
+def load_configs(env_token: str, env_custom_config: str) -> tuple[str, dict]:
     """
     Loads the Bot token and configuration variables.
 
     Mandatory default configuration values are loaded from 'config.yaml'
-        (must be located in the same directory as 'bot.py'). These can be
+        (must be located in the same directory as 'bot.py'). These must be
         overridden by a custom YAML file specified via the 'CUSTOM_CONFIG_PATH'
         environment variable.
 
-    All custom variables are optional. If 'CUSTOM_CONFIG_PATH' is undefined,
-        only defaults are used. Custom keys not present in the default
-        configuration are ignored.
+    Valid values to `dev_chat_id`, `main_group_id` and `approve_group_id`
+        variables must be defined for the bot to function.
+
+    Custom keys not present in the default configuration are ignored.
 
     Returns:
         tuple[str, dict]:
@@ -66,37 +101,43 @@ def load_configs():
             or contain invalid YAML syntax.
     """
     # Errors here cause the script to stop.
-    # Prints to STDERR and STDOUT for explicit capture in the service.
-    # TODO: Integrate sys outputs and bot logs.
 
     # Token.
-    token = os.getenv(ENV_TOKEN)
+    token = os.getenv(env_token)
     if not token:
-        error_msg = "TOKEN environment variable not found."
-        print(f"ERROR: {error_msg}", file=sys.stderr)
-        raise ValueError(error_msg)
+        raise ValueError(f"Environment variable not found: '{env_token}'")
 
     # Default config.
     try:
         with open(DEFAULT_CONFIG, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
-    except (FileNotFoundError, PermissionError, yaml.YAMLError) as e:
-        exc_name = type(e).__name__
-        error_msg = f"{exc_name}: {e}"
-        print(f"ERROR: {error_msg}", file=sys.stderr)
-        raise RuntimeError(error_msg) from e
+    except FileNotFoundError:
+        raise RuntimeError(f"Default config not found: '{DEFAULT_CONFIG}'")
+    except PermissionError:
+        raise RuntimeError(f"Default config permission error: '{DEFAULT_CONFIG}'")
+    except yaml.YAMLError as e:
+        raise RuntimeError(f"Invalid YAML in default config: {e}")
 
     # Custom config.
+    custom_config = {}
     custom_config_path = os.getenv(ENV_CUSTOM_CONFIG)
+    just_defaults_msg = "Using defaults, IDs could be wrong."
     if custom_config_path:
         try:
             with open(custom_config_path, 'r', encoding='utf-8') as f:
                 custom_config = yaml.safe_load(f) or {} # Empty custom config.
-        except (FileNotFoundError, PermissionError, yaml.YAMLError) as e:
-            exc_name = type(e).__name__
-            error_msg = f"{exc_name}: {e}"
-            print(f"ERROR: {error_msg}", file=sys.stderr)
-            raise RuntimeError(error_msg) from e
+        except FileNotFoundError:
+            warn_msg = "Custom config not found: %s. " + just_defaults_msg
+            logger.warning(warn_msg, custom_config_path)
+        except PermissionError:
+            warn_msg = "Custom config permission error: %s. " + just_defaults_msg
+            logger.warning(warn_msg, custom_config_path)
+        except yaml.YAMLError as e:
+            warn_msg = "Invalid YAML in custom config: %s. " + just_defaults_msg
+            logger.warning(warn_msg, custom_config_path)
+        if not custom_config:
+            warn_msg = "Empty custom config: %s. " + just_defaults_msg
+            logger.warning(warn_msg, custom_config_path)
 
         def _apply_overrides(base, overrides):
             """Helper recursive function to override config options."""
@@ -107,16 +148,15 @@ def load_configs():
                     elif value is not None:
                         base[key] = value
                     else:
-                        warn_msg = f"Configuration key '{key}' has no value in custom config. Ignored."
-                        print(warn_msg, file=sys.stdout)
+                        warn_msg = "Configuration key '%s' has no value in custom config. Ignored."
+                        logger.warning(warn_msg, key)
                 else:
-                    warn_msg = f"New variable name found in custom config: '{key}'. Ignored."
-                    print(warn_msg, file=sys.stdout)
-
+                    warn_msg = "New variable name found in custom config: '%s'. Ignored."
+                    logger.warning(warn_msg, key)
         _apply_overrides(config, custom_config)
     else:
-        warn_msg = f"WARNING: '{ENV_CUSTOM_CONFIG}' environment variable not found, using only config defaults."
-        print(warn_msg, file=sys.stdout)
+        warn_msg = "Environment variable not found: '%s'. " + just_defaults_msg
+        logger.warning(warn_msg, env_custom_config)
 
     return token, config
 
@@ -633,20 +673,20 @@ async def first_run_check(application: Application):
         )
 
 
-
-
-
 if __name__ == "__main__":
-    token, config = load_configs()
+    # Console logger.
+    setup_logging()
 
-    # TODO: Handle log and persistence files system errors.
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.ERROR,
-        filename=config["log_path"],
-    )
+    try:
+        token, config = load_configs(ENV_TOKEN, ENV_CUSTOM_CONFIG)
+    except (ValueError, RuntimeError) as e:
+        logger.critical("Startup failed: %s", e)
+        sys.exit(1)
+
+    # File logger.
+    setup_logging(log_path=config["log_path"], level=logging.INFO)
+
     persistence = PicklePersistence(filepath=config["state_path"])
-
     defaults = Defaults(parse_mode="html")
     application = (
         ApplicationBuilder()
