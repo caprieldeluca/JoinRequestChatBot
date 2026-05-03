@@ -163,7 +163,7 @@ def load_configs(env_token: str, env_custom_config: str) -> tuple[str, dict]:
 
 async def message_to_dev(message: str, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Sends a message to dev_chat.
+    Sends a message to dev chat.
 
     Message will be HTML escaped, chunked and sent as preformatted text.
     Message will be truncated with informative text if more than two chunks
@@ -173,8 +173,10 @@ async def message_to_dev(message: str, context: ContextTypes.DEFAULT_TYPE) -> No
     maxlen = 4000
     for i, offset in enumerate(range(0, len(message), maxlen)):
         if i == 2:
-            text = "<p>More than two chunks were attempted to be sent...<br>"
-            text += "Intentionally truncated.</p>"
+            text = (
+                "<p>More than two chunks were attempted to be sent...<br>"
+                "Intentionally truncated.</p>"
+            )
             await context.bot.send_message(
                 chat_id=config["dev_chat_id"],
                 text=text
@@ -190,12 +192,31 @@ async def message_to_dev(message: str, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
 
+async def log_warning(
+    warn_message: str,
+    context: ContextTypes.DEFAULT_TYPE,
+    update: Update | None = None,
+    ) -> None:
+    """
+    Logs a warning and sends a message to dev chat.
+
+    If `update` is defined, its contents will be included.
+    """
+    if update is not None:
+        update_str = update.to_dict() if isinstance(update, Update) else str(update)
+        warn_message += f"\nupdate = {json.dumps(update_str, indent=2, ensure_ascii=False)}"
+
+    # Log and send to dev chat.
+    logger.warning(msg=warn_message)
+    await message_to_dev(warn_message, context)
+
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Logs any unhandled error in the bot.
 
     Callback function of `application.add_error_handlerLog`.
-    Log the error and send a message to `dev_chat`.
+    Log the error and send a message to dev chat.
     """
     # Log the error before we do anything else, so we can see it even if something breaks.
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
@@ -216,7 +237,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         f"context.user_data = {html.escape(str(context.user_data))}\n\n"
         f"{html.escape(tb_string)}"
     )
-    # Send to `dev_chat`.
+    # Send to dev chat.
     await message_to_dev(message, context)
 
 
@@ -295,6 +316,13 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
             # Join request not found in main group.
             # TODO: Inform dev_chat.
             pass
+        elif e.message == "Chat not found":
+            # Bot is not a main group participant.
+            warn_message = (
+                "Bot is not a main group participant. Cleaning user registry anyway."
+                f"\n{config["main_group_id"] = }"
+            )
+            await log_warning(warn_message, context)
         else:
             raise
 
@@ -343,8 +371,16 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     Manages join requests.
 
     Callback function for `telegram.ext.ChatJoinRequestHandler`.
+    Only main group join requests are processed.
     """
-    # TODO: Log a warning and return if join request doesn't come from `main_group_id`.
+    if update.chat_join_request.chat.id != config["main_group_id"]:
+        # Join request received from other group than the main one.
+        warn_message = (
+            "Join request received from other group than the main one."
+            f"\n{config["main_group_id"] = }"
+        )
+        await log_warning(warn_message, context, update)
+        return
 
     # Check that there isn't a previous reject job for the user.
     if context.job_queue.get_jobs_by_name(str(update.effective_user.id)):
@@ -592,8 +628,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"{reviewer_mention}, "
                 f"the join request was already handled by someone else :("
             )
+        elif e.message == "Chat not found":
+            # Bot is not a main group participant.
+            text = "Bot is not a main group participant. Cleaning user registry anyway."
+            warn_message =  text + f"\n{config["main_group_id"] = }"
+            await log_warning(warn_message, context, update)
         else:
             raise
+
     except Forbidden:
         # The account got deleted.
         text = f"{reviewer_mention}, {user_mention}, user account got deleted."
