@@ -182,21 +182,32 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         f"context.user_data = {html.escape(str(context.user_data))}\n\n"
         f"{html.escape(tb_string)}"
     )
+    await message_to_dev(message, context)
 
-    # Avoid BadRequest: Message is too long
+
+async def message_to_dev(message: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Sends a message to dev_chat.
+
+    Message will be HTML escaped, chunked and sent as preformatted text.
+    Message will be truncated with informative text if more than two chunks
+        are attemped to be sent.
+    """
     escaped_msg = html.escape(message)
-    maxlen = 4085
+    maxlen = 4000
     for i, offset in enumerate(range(0, len(message), maxlen)):
         if i == 2:
+            text = "<p>More than two chunks were attempted to be sent...<br>"
+            text += "Intentionally truncated.</p>"
             await context.bot.send_message(
                 chat_id=config["dev_chat_id"],
-                text="More in the logs..."
+                text=text
             )
             break
 
         chunk = message[offset:offset + maxlen]
         formatted_chunk = f"<pre>{chunk}</pre>"
-        # Finally, send the message
+
         await context.bot.send_message(
             chat_id=config["dev_chat_id"],
             text=formatted_chunk,
