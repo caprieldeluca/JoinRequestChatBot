@@ -303,6 +303,13 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
             # If somebody blocks me.
             # TODO: Inform dev_chat.
             pass
+        except BadRequest as e:
+            if e.message == "Chat not found":
+                # Exotic "bot blocked" state I think.
+                # TODO: Inform dev_chat.
+                pass
+            else:
+                raise
 
     # Finish the user.
     message_id = None
