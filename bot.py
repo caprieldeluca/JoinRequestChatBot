@@ -338,32 +338,40 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # this check tells us if the user has already pressed the chat join request button and decided to hit it again
+async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Manages join requests.
+
+    Callback function for `telegram.ext.ChatJoinRequestHandler`.
+    """
+    # TODO: Log a warning and return if join request doesn't come from `main_group_id`.
+
+    # Check that there isn't a previous reject job for the user.
     if context.job_queue.get_jobs_by_name(str(update.effective_user.id)):
-        await context.bot.send_message(
-            chat_id=update.effective_user.id,
-            text="No necesitas solicitar unirte nuevamente. Escribe tu mensaje y se lo enviaré a los/as admins.",
-        )
-        # the return is important so we don't do the things below again
+        # TODO: Log a warning with the update.
         return
 
-    # send welcome message
-    try:
-        await context.bot.send_message(chat_id=update.effective_user.id, text=config["welcome_msg"])
-    except Forbidden:
-        # The user blocked me but sent a join request.
-        # TODO: Inform it in approve chat.
-        pass
-
-    # this needs to be a get_chat, because has_private_forwards is only set here
+    # Get the user object through `get_chat`.
     user = await context.bot.get_chat(chat_id=update.effective_user.id)
 
+    # Send them a welcome message.
+    blocked = False
+    try:
+        await context.bot.send_message(chat_id=user.id, text=config["welcome_msg"])
+    except Forbidden:
+        # The user blocked me but sent a join request.
+        blocked = True
+        pass
+
+    # Register in bot_data.
     mention = mention_html(user.id, user.first_name)
-    message = f"{mention} has sent a join request o/"
     context.bot_data["user_mentions"][user.id] = mention
 
-    # Define (keyword) args to send message.
+    # Message to approve_group.
+    message = f"{mention} (<code>{user.id}</code>) has sent a join request o/"
+    if blocked:
+        message += "\nBot seems to be blocked by the user."
+
     kwargs = {
         "chat_id": config["approve_group_id"],
         "text": message,
@@ -376,11 +384,15 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     send_message = await context.bot.send_message(**kwargs)
 
     if user.id in context.bot_data["messages_to_edit"]:
+        # User seems to be active. Append this message.
+        # TODO: Maybe warn this case.
         context.bot_data["messages_to_edit"][user.id].append(send_message.message_id)
     else:
+        # Register a list of messages to cleanup and next reply `message_id`.
         context.bot_data["messages_to_edit"][user.id] = [send_message.message_id]
         context.bot_data["last_message_to_user"][user.id] = send_message.message_id
 
+    # Create a rejection_job and register it.
     delta = datetime.timedelta(minutes=config["expiration_minutes"])
     d = datetime.datetime.now(datetime.UTC) + delta
     context.job_queue.run_once(
