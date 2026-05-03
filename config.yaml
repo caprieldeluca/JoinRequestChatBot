@@ -39,10 +39,9 @@ disconnected_reply_msg: |
 attachment_reply_msg: "I can't read attachments :-("
 ack_reply_msg: "" # Optional aknowledgment reply.
 ## To approve group
-approve_bttn_msg: "✅"
-decline_bttn_msg: "❌"
-ban_bttn_msg: "🛑"
-received_msg: "message received."
-sent_msg: "message sent."
+approve_bttn_msg: "✅ Approve"
+decline_bttn_msg: "❌ Decline"
+ban_bttn_msg: "🛑 Ban"
+received_msg: "message received." # Suffix of '{mention}, '. Included in relay.
 ## To main group
 relay_msg: "" # Optional relay of approved message in main group.

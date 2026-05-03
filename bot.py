@@ -457,17 +457,20 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles approve group messages."""
+    """
+    Handles approve group messages.
 
+    Only text reply messages in approve group ar handled by this function.
+    If message starts with '!' is ignored.
+    """
     if update.effective_message.text.startswith("!"):
-        # Message text starts with "!". Ignore.
         return
 
     if not update.effective_message.reply_to_message.reply_markup:
         if update.effective_message.reply_to_message.from_user.id == context.bot.id:
+            # Replied to a inactive bot message.
             await update.effective_message.reply_text(
-                "Sorry, you either replied to the wrong message, "
-                "or this user has been dealt with already."
+                "You've replied to an inactive message."
             )
         return
 
@@ -478,13 +481,17 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # NOTE: We can't check if user is currently in main_group join requests list.
     if user_id not in context.bot_data["user_mentions"]:
+        # Replied to an active message, but user is not registered in bot_data.
         await update.effective_message.reply_text(
-            "Sorry, this user has been dealt with already."
+            "Something went wrong, the user is not in my records."
         )
         return
 
+    # Update last reply id.
     context.bot_data["last_message_to_user"][user_id] = update.effective_message.message_id
 
+    # Send a message to the user.
+    blocked = False
     try:
         await context.bot.copy_message(
             chat_id=user_id,
@@ -492,15 +499,16 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
             message_id=update.effective_message.message_id,
         )
     except Forbidden:
-        message = await update.effective_message.reply_text(
-            f"The user {context.bot_data['user_mentions'][user_id]} blocked me, "
-            f"I can't send them messages anymore. I can still ban them however 😈",
-            reply_markup=create_buttons(user_id),
-        )
-        context.bot_data["messages_to_edit"][user_id].append(message.message_id)
-        return
+        blocked = True
+
+    # Send a message to approve group.
+    if not blocked:
+        text = f"Message sent to {context.bot_data['user_mentions'][user_id]}."
+    else:
+        text = f"\nBot seems to be blocked by {context.bot_data['user_mentions'][user_id]}."
+
     send_message = await update.effective_message.reply_text(
-        f"{context.bot_data['user_mentions'][user_id]}, {config["sent_msg"]}",
+        text,
         reply_markup=create_buttons(user_id),
     )
     context.bot_data["messages_to_edit"][user_id].append(send_message.message_id)
