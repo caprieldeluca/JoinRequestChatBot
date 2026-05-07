@@ -207,8 +207,9 @@ async def log_warning(
         warn_message += f"\nupdate = {json.dumps(update_str, indent=2, ensure_ascii=False)}"
 
     # Log and send to dev chat.
-    logger.warning(msg=warn_message)
-    await message_to_dev(warn_message, context)
+    warn_string = "".join(warn_message)
+    logger.warning(msg=warn_string)
+    await message_to_dev(warn_string, context)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -241,8 +242,8 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     await message_to_dev(message, context)
 
 
-def create_buttons(user_id: int):
-    """Creates keyboard markup buttons with *callback_data*."""
+def create_buttons(user_id: int) -> InlineKeyboardMarkup:
+    """Creates keyboard markup buttons with callback data."""
     buttons = InlineKeyboardMarkup(
         [
             [
@@ -297,10 +298,19 @@ def update_job(job_queue: JobQueue, job_name: str):
     return d
 
 
-async def reject_job(context: ContextTypes.DEFAULT_TYPE):
+async def reject_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Scheduled job. Declines a join request by expiration.
+
+    Informs the user about their expiration.
+    Calls to finish the user in approve group and bot data.
+    """
     user_id = context.job.user_id
 
     decline_success = False
+    warn_decline_fail = (
+        "Decline by expiration failed.",
+    )
     try:
         await context.bot.decline_chat_join_request(
             chat_id=config['main_group_id'],
@@ -309,25 +319,38 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
         decline_success = True
     except Forbidden:
         # The account got deleted.
-        # TODO: Inform dev_chat.
-        pass
+        warn_message = warn_decline_fail + (
+            "\nUser account got deleted.",
+            f"\n{user_id = }",
+        )
+        await log_warning(warn_message, context)
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
             # Join request not found in main group.
-            # TODO: Inform dev_chat.
-            pass
+            warn_message = warn_decline_fail + (
+                "\nJoin request not found in main group.",
+                f"\n{user_id = }",
+                f"\n{config["main_group_id"] = }",
+            )
+            await log_warning(warn_message, context)
         elif e.message == "Chat not found":
             # Bot is not a main group participant.
-            warn_message = (
-                "Bot is not a main group participant. Cleaning user registry anyway."
-                f"\n{config["main_group_id"] = }"
+            warn_message = warn_decline_fail + (
+                "\nBot is not a main group participant.",
+                f"\n{config["main_group_id"] = }",
             )
             await log_warning(warn_message, context)
         else:
             raise
 
-    # Don't send message to user chat if decline failed.
+    # Inform the user.
+    blocked = False
     if decline_success:
+        warn_inform_fail = (
+            "Inform user about their expiration failed.",
+            "\nCleaning user anyway.",
+            f"\n{user_id = }",
+        )
         try:
             await context.bot.send_message(
                 chat_id=user_id,
@@ -335,28 +358,30 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE):
             )
         except Forbidden:
             # If somebody blocks me.
-            # TODO: Inform dev_chat.
-            pass
+            blocked = True
+            warn_message = warn_inform_fail + (
+                "\nBot blocked by 'Forbidden' error.",
+            )
+            await log_warning(warn_message, context)
         except BadRequest as e:
             if e.message == "Chat not found":
                 # Exotic "bot blocked" state I think.
-                # TODO: Inform dev_chat.
-                pass
+                blocked = True
+                warn_message = warn_inform_fail + (
+                    "\nBot blocked by 'Chat not found' error.",
+                )
+                await log_warning(warn_message, context)
             else:
                 raise
 
     # Finish the user.
-    message_id = None
-    mention = str(user_id)
-    try:
-        message_id = context.bot_data["last_message_to_user"][user_id]
-        mention = context.bot_data["user_mentions"][user_id]
-    except KeyError:
-        # Persistence failed.
-        # TODO: Inform dev_chat.
-        pass
-
-    text = f"{mention}, join request expired"
+    message_id = context.bot_data["last_message_to_user"][user_id]
+    mention = context.bot_data["user_mentions"][user_id]
+    text = f"{mention}, join request expired."
+    if not decline_success:
+        text += "\nThe join request was already handled by someone else."
+    if blocked:
+        text += "\nBot seems to be blocked by the user."
     await finish_user(
         context,
         text,
@@ -397,7 +422,6 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Forbidden:
         # The user blocked me but sent a join request.
         blocked = True
-        pass
 
     # Register in bot_data.
     mention = mention_html(user.id, user.first_name)
@@ -421,7 +445,7 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if user.id in context.bot_data["messages_to_edit"]:
         # User seems to be active. Append this message.
-        # TODO: Maybe warn this case.
+        # TODO: Warn this case.
         context.bot_data["messages_to_edit"][user.id].append(send_message.message_id)
     else:
         # Register a list of messages to cleanup and next reply `message_id`.
@@ -626,7 +650,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.bot_data["messages_to_edit"][user_id].append(message_id)
             text = (
                 f"{reviewer_mention}, "
-                f"the join request was already handled by someone else :("
+                f"the join request was already handled by someone else."
             )
         elif e.message == "Chat not found":
             # Bot is not a main group participant.
@@ -679,6 +703,10 @@ async def finish_user(
         "text": text,
     }
 
+    # TODO: Check if we need the message id as argument or can get it here.
+    # Rejection job can only happen with user registered in the context.
+    # Button callbacks can happen with unregistered users, but
+    #  send us the message id in the update.
     if message_id is not None:
         msg_kwargs["reply_parameters"] = ReplyParameters(message_id)
 
