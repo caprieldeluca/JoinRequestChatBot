@@ -814,11 +814,12 @@ async def first_run_check(application: Application):
         )
         raise RuntimeError("".join(error_msg))
     if not main_group.permissions.can_invite_users:
-        error_msg = (
-            "Bot can't handle join requests in main group:",
-            f" '{config["main_group_id"]}'."
-        )
-        raise RuntimeError("".join(error_msg))
+        logger.warning("Bot can't handle join requests in main group: '%s'.", config["main_group_id"])
+    #     error_msg = (
+    #         "Bot can't handle join requests in main group:",
+    #         f" '{config["main_group_id"]}'."
+    #     )
+    #     raise RuntimeError("".join(error_msg))
 
     try:
         approve_group = await application.bot.get_chat(config["approve_group_id"])
