@@ -274,7 +274,7 @@ def create_buttons(user_id: int) -> InlineKeyboardMarkup:
     return buttons
 
 
-def update_job(job_queue: JobQueue, job_name: str):
+async def update_job(context: ContextTypes.DEFAULT_TYPE, job_name: str):
     """
     Updates the datetime trigger of a scheduled job.
 
@@ -290,12 +290,17 @@ def update_job(job_queue: JobQueue, job_name: str):
     d = datetime.datetime.now(datetime.UTC) + delta
 
     try:
-        job = job_queue.get_jobs_by_name(job_name)[0]
+        job = context.job_queue.get_jobs_by_name(job_name)[0]
         job.job.reschedule("date", run_date=d)
     except IndexError:
-        # No previous job for that name. Create one.
-        # TODO: Inform dev_chat.
-        job_queue.run_once(
+        # No previous job for that name. Must never happen.
+        # Log a warning and create one.
+        warn_message = (
+            "\nTrying to update inexistent reject job. Creating a new one.",
+            f"\n{job_name = }",
+        )
+        await log_warning(warn_message, context)
+        context.job_queue.run_once(
             reject_job,
             when=d,
             user_id=int(job_name),
@@ -519,7 +524,7 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
             )
 
     # Kick the deadline.
-    d = update_job(context.job_queue, str(user_id))
+    d = await update_job(context, str(user_id))
     context.bot_data["user_expiration"][user_id] = str(d)
 
 
@@ -581,7 +586,7 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.bot_data["messages_to_edit"][user_id].append(send_message.message_id)
 
     # Kick the deadline.
-    d = update_job(context.job_queue, str(user_id))
+    d = await update_job(context, str(user_id))
     context.bot_data["user_expiration"][user_id] = str(d)
 
 
@@ -760,7 +765,7 @@ async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
 
 async def post_stop(application: Application) -> None:
     """Informs application stop to dev chat."""
-    await message_to_dev("Application topped.", application.bot)
+    await message_to_dev("Application stopped.", application.bot)
 
 
 async def first_run_check(application: Application):
