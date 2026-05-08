@@ -31,6 +31,7 @@ from telegram.ext import (
     JobQueue,
 )
 from telegram.helpers import mention_html
+from telegram.constants import ChatMemberStatus
 from typing import List
 
 logger = logging.getLogger(__name__)
@@ -813,13 +814,22 @@ async def first_run_check(application: Application):
             f" '{config["main_group_id"]}'."
         )
         raise RuntimeError("".join(error_msg))
-    if not main_group.permissions.can_invite_users:
-        logger.warning("Bot can't handle join requests in main group: '%s'.", config["main_group_id"])
-    #     error_msg = (
-    #         "Bot can't handle join requests in main group:",
-    #         f" '{config["main_group_id"]}'."
-    #     )
-    #     raise RuntimeError("".join(error_msg))
+    member = await application.bot.get_chat_member(config["main_group_id"], application.bot.id)
+    if member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+        error_msg = (
+            "Bot hasn't admin rights in main group:",
+            f" '{config["main_group_id"]}'."
+        )
+        raise RuntimeError("".join(error_msg))
+    if (
+        member.status == ChatMemberStatus.ADMINISTRATOR
+        and not member.can_invite_users
+    ):
+        error_msg = (
+            "Bot can't handle join requests in main group (invite users admin right):",
+            f" '{config["main_group_id"]}'."
+        )
+        raise RuntimeError("".join(error_msg))
 
     try:
         approve_group = await application.bot.get_chat(config["approve_group_id"])
