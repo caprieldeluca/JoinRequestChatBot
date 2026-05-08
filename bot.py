@@ -161,7 +161,7 @@ def load_configs(env_token: str, env_custom_config: str) -> tuple[str, dict]:
     return token, config
 
 
-async def message_to_dev(message: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def message_to_dev(message: str, bot: Bot) -> None:
     """
     Sends a message to dev chat.
 
@@ -177,7 +177,7 @@ async def message_to_dev(message: str, context: ContextTypes.DEFAULT_TYPE) -> No
                 "<p>More than two chunks were attempted to be sent...<br>"
                 "Intentionally truncated.</p>"
             )
-            await context.bot.send_message(
+            await bot.send_message(
                 chat_id=config["dev_chat_id"],
                 text=text
             )
@@ -186,7 +186,7 @@ async def message_to_dev(message: str, context: ContextTypes.DEFAULT_TYPE) -> No
         chunk = message[offset:offset + maxlen]
         formatted_chunk = f"<pre>{chunk}</pre>"
 
-        await context.bot.send_message(
+        await bot.send_message(
             chat_id=config["dev_chat_id"],
             text=formatted_chunk,
         )
@@ -209,7 +209,7 @@ async def log_warning(
     # Log and send to dev chat.
     warn_string = "".join(warn_message)
     logger.warning(msg=warn_string)
-    await message_to_dev(warn_string, context)
+    await message_to_dev(warn_string, context.bot)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -239,7 +239,13 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         f"{html.escape(tb_string)}"
     )
     # Send to dev chat.
-    await message_to_dev(message, context)
+    try:
+        await message_to_dev(message, context.bot)
+    except Exception as e:
+        # Take a few seconds and try again.
+        await asyncio.sleep(10)
+        message += f"\n\n This is a second try of message to dev.\nFirst failed with: {e}"
+        await message_to_dev(message, context.bot)
 
 
 def create_buttons(user_id: int) -> InlineKeyboardMarkup:
@@ -751,6 +757,11 @@ async def edit_buttons(bot: Bot, messages_to_edit: List[int]):
         await asyncio.sleep(1)
 
 
+async def post_stop(application: Application) -> None:
+    """Informs application stop to dev chat."""
+    await message_to_dev("Application topped.", application.bot)
+
+
 async def first_run_check(application: Application):
     """
     Do last things before start to run.
@@ -786,6 +797,56 @@ async def first_run_check(application: Application):
             name=str(user_id)
         )
 
+    # Check ids.
+    try:
+        main_group = await application.bot.get_chat(config["main_group_id"])
+    except Exception as e:
+        error_msg = (
+            "\nBot can't get main group:",
+            f" '{config["main_group_id"]}'.",
+            f"\n{e}",
+        )
+        raise RuntimeError("".join(error_msg))
+    if not main_group.permissions.can_send_messages:
+        error_msg = (
+            "Bot can't send messages to main group:",
+            f" '{config["main_group_id"]}'."
+        )
+        raise RuntimeError("".join(error_msg))
+    if not main_group.permissions.can_invite_users:
+        error_msg = (
+            "Bot can't handle join requests in main group:",
+            f" '{config["main_group_id"]}'."
+        )
+        raise RuntimeError("".join(error_msg))
+
+    try:
+        approve_group = await application.bot.get_chat(config["approve_group_id"])
+    except Exception as e:
+        error_msg = (
+            "\nBot can't get approve group:",
+            f" '{config["approve_group_id"]}'.",
+            f"\n{e}",
+        )
+        raise RuntimeError("".join(error_msg))
+    if not approve_group.permissions.can_send_messages:
+        error_msg = (
+            "Bot can't send messages to approve group:",
+            f" '{config["approve_group_id"]}'."
+        )
+        raise RuntimeError("".join(error_msg))
+
+    try:
+        dev_chat = await application.bot.get_chat(config["dev_chat_id"])
+        await dev_chat.send_message("Apllication started.")
+    except Exception as e:
+        error_msg = (
+            "\nBot can't send messages to dev chat:",
+            f" '{config["dev_chat_id"]}'.",
+            f"\n{e}",
+        )
+        raise RuntimeError("".join(error_msg))
+
 
 if __name__ == "__main__":
     # Console logger.
@@ -808,6 +869,7 @@ if __name__ == "__main__":
         .defaults(defaults)
         .persistence(persistence)
         .post_init(first_run_check)
+        .post_stop(post_stop)
         .build()
     )
 
@@ -823,10 +885,14 @@ if __name__ == "__main__":
     )
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_error_handler(error_handler)
-    application.run_polling(
-        allowed_updates=[
-            Update.MESSAGE,
-            Update.CHAT_JOIN_REQUEST,
-            Update.CALLBACK_QUERY,
-        ]
-    )
+    try:
+        application.run_polling(
+            allowed_updates=[
+                Update.MESSAGE,
+                Update.CHAT_JOIN_REQUEST,
+                Update.CALLBACK_QUERY,
+            ]
+        )
+    except RuntimeError as e:
+        logger.critical("Startup failed: %s", e)
+        sys.exit(1)
