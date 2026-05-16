@@ -580,10 +580,8 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
         text = f"\nBot seems to be blocked by {context.bot_data['user_mentions'][user_id]}."
 
     send_message = await update.effective_message.reply_text(
-        text,
-        reply_markup=create_buttons(user_id),
+        text
     )
-    context.bot_data["messages_to_edit"][user_id].append(send_message.message_id)
 
     # Kick the deadline.
     d = await update_job(context, str(user_id))
