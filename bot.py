@@ -621,7 +621,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Optionally to a main group topic.
                 if config["relay_main_tid"]:
                     kwargs["message_thread_id"] = config["relay_main_tid"]
-
+                # Wait a second to let other bots messages first.
+                await asyncio.sleep(1)
                 await context.bot.send_message(**kwargs)
 
             text = f"{reviewer_mention}, join request approved."
