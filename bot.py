@@ -490,7 +490,7 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
     elif update.effective_message.effective_attachment:
         # We don't allow attachments.
         await update.effective_message.reply_text(
-            config["attachment_msg"],
+            config["attachment_reply_msg"],
             do_quote=True
         )
         return
