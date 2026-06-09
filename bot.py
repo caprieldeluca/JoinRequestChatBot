@@ -10,11 +10,12 @@ import yaml
 from pathlib import Path
 
 from telegram import (
-    Update,
+    Bot,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    Bot,
+    LinkPreviewOptions,
     ReplyParameters,
+    Update,
 )
 from telegram.error import RetryAfter, Forbidden, BadRequest, ChatMigrated
 from telegram.ext import (
@@ -535,6 +536,13 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
     Only text reply messages in approve group ar handled by this function.
     If message starts with '!' is ignored.
     """
+    if update.effective_message.text is None:
+        # Message from group has no text (it's likely an attachment).
+        await update.effective_message.reply_text(
+            "Only text messages are handled."
+        )
+        return
+
     if update.effective_message.text.startswith("!"):
         return
 
@@ -565,10 +573,9 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Send a message to the user.
     blocked = False
     try:
-        await context.bot.copy_message(
+        await context.bot.send_message(
             chat_id=user_id,
-            from_chat_id=update.effective_chat.id,
-            message_id=update.effective_message.message_id,
+            text=update.effective_message.text,
         )
     except Forbidden:
         blocked = True
@@ -579,9 +586,7 @@ async def message_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
     else:
         text = f"\nBot seems to be blocked by {context.bot_data['user_mentions'][user_id]}."
 
-    send_message = await update.effective_message.reply_text(
-        text
-    )
+    await update.effective_message.reply_text(text)
 
     # Kick the deadline.
     d = await update_job(context, str(user_id))
@@ -877,7 +882,10 @@ if __name__ == "__main__":
     setup_logging(log_path=config["log_path"], level=logging.INFO)
 
     persistence = PicklePersistence(filepath=config["state_path"])
-    defaults = Defaults(parse_mode="html")
+    defaults = Defaults(
+        parse_mode="html",
+        link_preview_options=LinkPreviewOptions(is_disabled=True),
+    )
     application = (
         ApplicationBuilder()
         .token(token)
@@ -891,7 +899,7 @@ if __name__ == "__main__":
     application.add_handler(ChatJoinRequestHandler(join_request))
     application.add_handler(
         MessageHandler(
-            filters.Chat(config["approve_group_id"]) & filters.REPLY & filters.TEXT,
+            filters.Chat(config["approve_group_id"]) & filters.REPLY,
             message_from_group,
         )
     )
