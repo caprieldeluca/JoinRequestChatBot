@@ -17,7 +17,13 @@ from telegram import (
     ReplyParameters,
     Update,
 )
-from telegram.error import RetryAfter, Forbidden, BadRequest, ChatMigrated
+from telegram.error import (
+    BadRequest,
+    ChatMigrated,
+    Forbidden,
+    NetworkError,
+    RetryAfter,
+)
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
@@ -224,11 +230,16 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     # Log the error before we do anything else, so we can see it even if something breaks.
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
-    # `traceback.format_exception` returns the usual python message about an exception.
-    # As a list of strings. Join them together.
-    tb_list = traceback.format_exception(
-        None, context.error, context.error.__traceback__
-    )
+
+    is_network_error = isinstance(context.error, NetworkError)
+    if is_network_error:
+        tb_list = ["NetworkError traceback ignored."]
+    else:
+        # `traceback.format_exception` returns the usual python message about an exception.
+        # As a list of strings. Join them together.
+        tb_list = traceback.format_exception(
+            None, context.error, context.error.__traceback__
+        )
     tb_string = "".join(tb_list)
 
     # Build the message with some markup and additional information about what happened.
@@ -375,7 +386,8 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             warn_message = warn_inform_fail + (
                 "\nBot blocked by 'Forbidden' error.",
             )
-            await log_warning(warn_message, context)
+            # TODO: Implement a debug mode.
+            # await log_warning(warn_message, context)
         except BadRequest as e:
             if e.message == "Chat not found":
                 # Exotic "bot blocked" state I think.
@@ -383,7 +395,8 @@ async def reject_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 warn_message = warn_inform_fail + (
                     "\nBot blocked by 'Chat not found' error.",
                 )
-                await log_warning(warn_message, context)
+                # TODO: Implement a debug mode.
+                # await log_warning(warn_message, context)
             else:
                 raise
 
@@ -479,7 +492,15 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles private chat messages."""
-    # NOTE: We can't check if user is currently in main_group join requests list.
+
+    user_id = update.effective_user.id
+    # If user was banned log a warning and inform dev_chat.
+    if user_id in context.bot_data["banned_users"]:
+        msg = "Message received from banned user."
+        await log_warning(msg, context, update)
+        return
+
+    # We can't check if user is currently in main_group join requests list.
     if update.effective_user.id not in context.bot_data["user_mentions"]:
         # We don't know this user.
         await update.effective_message.reply_text(
@@ -498,7 +519,6 @@ async def message_from_private(update: Update, context: ContextTypes.DEFAULT_TYP
 
     else:
         # Send a message to approve_group.
-        user_id = update.effective_user.id
         user_mention = context.bot_data["user_mentions"][user_id]
 
         # Define (keyword) args to send message to approve group.
@@ -650,11 +670,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=main_group_id,
                     user_id=user_id
                 )
+                context.bot_data["banned_users"].add(user_id)
             except BadRequest as e:
                 if e.message == "Participant_id_invalid":
                     # User is not a main_group participant.
-                    # TODO: Api Error? Inform dev_chat.
-                    pass
+                    # Api Error? Log a warning and inform dev chat.
+                    warn_msg = "BadRequest error: Participant_id_invalid in ban trigger."
+                    await log_warning(warn_msg, context, update)
+
             text = f"{reviewer_mention}, user banned."
     except BadRequest as e:
         if e.message == "Hide_requester_missing":
@@ -685,8 +708,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.job_queue.get_jobs_by_name(str(user_id))[0].schedule_removal()
     except IndexError:
         # No job for the user. Persistence failed.
-        # TODO: Inform dev_chat.
-        pass
+        warn_message =  f"IndexError trying to remove reject job user <code>{user_id}</code>."
+        await log_warning(warn_message, context, update)
 
     # Finish the user
     await finish_user(
@@ -787,9 +810,10 @@ async def first_run_check(application: Application):
     b_d.setdefault("user_mentions", {})
     b_d.setdefault("last_message_to_user", {})
     b_d.setdefault("user_expiration", {})
+    b_d.setdefault("banned_users", set())
 
-    # Restore scheduled reject jobs from persistent data.
-    # NOTE: We can't get a list of current main_group join requests.
+    # Restore scheduled reject jobs from bot data.
+    # We can't get a list of current main_group join requests.
     i = 0 # Expired index.
     for key, value in b_d["user_expiration"].items():
         user_id = key
